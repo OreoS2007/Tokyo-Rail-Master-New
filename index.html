@@ -73,11 +73,12 @@ padding:11px 13px;cursor:pointer;text-align:left;font-family:var(--g);color:var(
 .lchk{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 2px;cursor:pointer}
 .lchk input{width:15px;height:15px;accent-color:var(--signage);flex:none}
 .lchk u{width:11px;height:4px;border-radius:2px;flex:none;text-decoration:none}
-.lchk span{flex:1}.lchk em{font-style:normal;font-size:10px;color:var(--muted)}
-.lchk__r{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.lchk>span:not(.lgo){flex:1;min-width:0}
+.lchk em{font-style:normal;font-size:10px;color:var(--muted);flex:none}
+.lchk__r{display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0}
 .lchk__n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.map-wrap{position:relative;background:var(--land);border-radius:5px;overflow:hidden;touch-action:none;
-user-select:none;margin:0 auto 10px}
+.map-wrap{position:relative;background:var(--land);border-radius:5px;overflow:hidden;
+user-select:none;margin:0 auto 10px;touch-action:none}
 .map-wrap svg{display:block;width:100%;height:auto;cursor:grab}
 .map-wrap.is-drag svg{cursor:grabbing}
 .map-tools{position:absolute;right:7px;bottom:7px;display:flex;gap:5px;z-index:4}
@@ -94,6 +95,8 @@ vertical-align:middle;margin:0 1px;text-decoration:none}.map-legend u.s{width:4p
 .st-g[data-tap]{cursor:pointer}
 .st-g.is-r .st-dot{fill:var(--yamanote);stroke:#fff;stroke-width:2.6}
 .st-g.is-w .st-dot{fill:var(--alert);stroke:#fff;stroke-width:2.6}
+.st-g.is-blank .st-dot{fill:#fff;stroke:#E0A030;stroke-width:2.6;stroke-dasharray:2.4 1.6}
+.lbl--blank{fill:#E0A030;font-weight:700;font-size:12px}
 .lbl{font-family:var(--g);pointer-events:none;paint-order:stroke}
 .lbl--st{fill:#D6E3EC;font-size:9px;stroke:#0B1319;stroke-width:2.4}
 .lbl--far{fill:#55697A;font-size:7.5px;stroke:#0B1319;stroke-width:1.6;opacity:.62}
@@ -229,8 +232,9 @@ padding:1px 7px;vertical-align:2px;font-weight:600}
 .cheer{margin-top:11px;padding:10px 12px;background:#FFF6E8;border:1px solid #E0A030;border-radius:5px;
 font-size:13.5px;font-weight:600;color:#8A5A12;text-align:center}
 .lgo{display:inline-grid;place-items:center;font-family:var(--lat);font-weight:700;
-letter-spacing:-.03em;flex:0 0 auto;line-height:1;vertical-align:middle;box-sizing:border-box;
-overflow:hidden;font-stretch:normal}
+letter-spacing:-.03em;line-height:1;vertical-align:middle;box-sizing:border-box;
+overflow:hidden;font-stretch:normal;aspect-ratio:1/1;
+flex:0 0 auto !important;align-self:center}
 .lgo--sq{border-radius:3px}
 .lgo--rg{border-radius:50%;background:#fff}
 .ltag{display:inline-flex;align-items:center;gap:6px;vertical-align:middle}
@@ -238,6 +242,7 @@ overflow:hidden;font-stretch:normal}
 border-radius:11px;background:var(--paper);border:1px solid var(--rule);margin:0 3px 3px 0;white-space:nowrap}
 
 .wardname--hl{fill:#CFE8A8;font-size:13px;font-weight:700;letter-spacing:.2em}
+.geo-wardname{fill:#fff;font-weight:700;letter-spacing:.04em;stroke:#0B1319;stroke-width:3;paint-order:stroke;text-anchor:middle}
 .wardname{fill:#7FA0B8;font-size:10.5px;letter-spacing:.16em;stroke:#101A22;stroke-width:2.6;
 paint-order:stroke;font-weight:600}
 .hero{background:var(--signage);color:#fff;border-radius:6px;padding:15px 16px;margin-bottom:14px}
@@ -318,8 +323,9 @@ border-radius:5px;padding:11px 13px;margin-top:12px}
 .clearbox>div{flex:1}
 </style>
 <div id="app">
-<div class="topbar">
-<div class="sign"><div class="sign__m">JY</div>
+<div class="topbar" id="topBar">
+<div class="sign" id="signRow" style="cursor:pointer" title="ゲーム選択に戻る">
+<div class="sign__m">JY</div>
 <div><div class="sign__t">東京路線マスター</div><span class="sign__s">Tokyo Rail Master</span></div>
 <div class="sign__l" id="sigL"><b>Lv.1</b></div></div>
 <div id="navBar" style="display:none"></div>
@@ -432,6 +438,12 @@ D.l.forEach((r,li)=>{
 });
 const N=ST.length, PAXMAX=Math.max.apply(null,ST.map(s=>s.pax));
 const rad=p=>+(3.2+4.9*Math.sqrt(p/PAXMAX)).toFixed(2);
+/* pax は「千人／日」単位で保持している内部値。表示は日本語の慣用表記（万人）に直す */
+function fmtPax(p){
+  const man=p/10; // 千人→万人
+  if(man<1)return Math.round(p*1000).toLocaleString()+'人';
+  return (Math.round(man*10)/10).toLocaleString()+'万人';
+}
 
 /* ===== 2. グラフ（路線内の隣接＋同一駅での乗換） ===== */
 const ADJ={};ST.forEach(s=>ADJ[s.i]=[]);
@@ -693,6 +705,19 @@ function markCleared(li,si,ok){
   let n=cur?cur.n:0;
   n=ok?Math.min(REVIEW_DAYS.length-1,n+(cur?1:0)):0;
   state.progress.study[stKey(li,si)]={n:n,last:Date.now(),next:Date.now()+REVIEW_DAYS[n]*DAY};
+  /* この区間をクリアしたら、それに完全に含まれる小区間もクリア済みにする
+     （24駅クリア→内包する6駅・12駅の区間も達成扱い）。すでに記録がある区間は上書きしない */
+  if(ok){
+    const L=LINES[li],sg=stagesOf(L),range=sg[si];
+    if(range){
+      sg.forEach((r,cj)=>{
+        if(cj===si||r[0]<range[0]||r[1]>range[1])return;
+        if(!stDone(li,cj)){
+          state.progress.study[stKey(li,cj)]={n:0,last:Date.now(),next:Date.now()+REVIEW_DAYS[0]*DAY};
+        }
+      });
+    }
+  }
   touch();
 }
 function dueList(){
@@ -712,7 +737,7 @@ const fmtDue=ms=>{const d=Math.ceil((ms-Date.now())/DAY);
 
 /* ===== 5. 地図 ===== */
 /* 区ごとにごくわずかに色を変える（境界が読み取れる程度、目立たせない） */
-const WARD_FILL=['#20343F','#233845','#1E313C','#253B47','#213642','#1C2E38','#263D4A','#1F3340'];
+const WARD_FILL=['#5B9BD5','#70AD47','#D4A017','#C0504D','#8064A2','#4BACC6','#E08A3C','#6FA88A'];
 const NS='http://www.w3.org/2000/svg';
 const sv=(t,a)=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);return n};
 const tx=(x,y,c,t,an,ex)=>{const n=sv('text',Object.assign({x:x,y:y,class:'lbl '+c,'text-anchor':an||'middle'},ex||{}));n.textContent=t;return n};
@@ -721,8 +746,12 @@ function buildMap(o){
   o=Object.assign({labels:'auto',interactive:false,onTap:null,ar:AR_T,view:null,marks:[],
     legend:false,maxVh:0,lv:state.level,routeLegs:null,focusLine:null,locked:false,hlWard:null},o||{});
   const view=o.view||levelBox(o.lv,o.ar);
+  let locked=!!o.locked;
   const wrap=el('div','map-wrap');
   if(o.maxVh)wrap.style.maxWidth=(o.maxVh/o.ar).toFixed(1)+'vh';
+  /* 固定中は指の操作をページに渡す。操作モードのときだけ地図が受け取る */
+  const setTouch=()=>{wrap.style.touchAction=locked?'auto':'none'};
+  setTouch();
   let vb=view.slice();
   const svg=sv('svg',{viewBox:vb.join(' '),preserveAspectRatio:'xMidYMid meet'});
 
@@ -732,7 +761,7 @@ function buildMap(o){
   let wi=0;
   for(const k in WARDS){
     const hl=(o.hlWard===k);
-    const f=hl?'#3C5B44':WARD_FILL[wi%WARD_FILL.length];wi++;
+    const f=hl?'#4FA85A':WARD_FILL[wi%WARD_FILL.length];wi++;
     WARDS[k].forEach(r=>svg.appendChild(sv('polygon',
       {points:enc(r),fill:f,stroke:hl?'var(--yamanote)':'var(--wardline)',
        'stroke-width':hl?2.4:1.1,'stroke-linejoin':'round'})));
@@ -821,14 +850,14 @@ function buildMap(o){
       const lf=P[i].x<(vb[0]+vb[2]/2),off=rad(s.pax)+4;
       /* 問題で扱う駅＝強調、関係する路線の駅＝通常、それ以外＝参照できる程度に薄く */
       const cls=mk?'lbl--mk':(hasRel&&relSet[i]===undefined?'lbl--far':'lbl--st');
-      g.appendChild(tx(P[i].x+(lf?-off:off),P[i].y+3.5+showL[i],cls,s.ja,lf?'end':'start'));
+      const labelText=(mk&&mk.kind==='blank')?'？':s.ja;
+      g.appendChild(tx(P[i].x+(lf?-off:off),P[i].y+3.5+showL[i],cls+(mk&&mk.kind==='blank'?' lbl--blank':''),labelText,lf?'end':'start'));
     }
-    if(mk)g.setAttribute('class','st-g '+(mk.kind==='right'?'is-r':'is-w'));
+    if(mk)g.setAttribute('class','st-g '+(mk.kind==='right'?'is-r':(mk.kind==='blank'?'is-blank':'is-w')));
     svg.appendChild(g);groups[i]=g;
   });
   wrap.appendChild(svg);
 
-  let locked=!!o.locked;
   const pts=new Map();let last=null,pinch=null,moved=0,downG=null;
   const apply=()=>svg.setAttribute('viewBox',vb.map(v=>v.toFixed(1)).join(' '));
   const rect=()=>svg.getBoundingClientRect();
@@ -888,7 +917,8 @@ function buildMap(o){
       locked=!locked;
       lk.className=locked?'maplock':'maplock is-on';
       lk.textContent=locked?'🔒 地図を操作する':'✋ 操作中（押すと固定）';
-      tl.style.display=locked?'none':'flex';};
+      tl.style.display=locked?'none':'flex';
+      setTouch();};
     wrap.appendChild(lk);
   }
   if(o.legend){
@@ -966,7 +996,7 @@ function plate(s,o){
     b.appendChild(ln); b.appendChild(el('div','plate__w',s.ward));
   }
   b.appendChild(el('div','plate__name',o.blank?'？':s.ja));
-  b.appendChild(el('div','plate__r',o.blank?'':(s.pax?'約'+s.pax.toLocaleString()+'千人／日':'')));
+  b.appendChild(el('div','plate__r',o.blank?'':(s.pax?fmtPax(s.pax)+'／日':'')));
   if(o.left!==null||o.right!==null){
     const nb=el('div','plate__nb');
     nb.appendChild(el('span',o.left==='?'?'q':'',o.left?'← '+o.left:''));
@@ -1044,7 +1074,11 @@ function genSpot(){
   if(ps.length<4)return genQuiz();
   const dir=pick(['toSpot','toStation']),s=pick(ps),sp=pick(s.spots);
   if(dir==='toSpot'){
-    const oth=shuffle(ps.filter(x=>x.i!==s.i).reduce((a,x)=>a.concat(x.spots),[])).slice(0,3).map(x=>x[0]);
+    /* 同じ名所が複数駅の近くに登録されていることがある（例:明治神宮）ので、
+       名前で重複排除し、正解と同名の候補も除外する */
+    const cand=shuffle(ps.filter(x=>x.i!==s.i).reduce((a,x)=>a.concat(x.spots),[]));
+    const seen=new Set([sp[0]]),oth=[];
+    for(const p2 of cand){ if(seen.has(p2[0]))continue; seen.add(p2[0]); oth.push(p2[0]); if(oth.length===3)break; }
     if(oth.length<3)return genQuiz();
     return{mode:'spot',dir:dir,station:s.i,answerText:sp[0],icon:sp[1],optType:'text',
       options:shuffle([sp[0]].concat(oth)),plate:plate(s),text:s.ja+'駅の近くにあるのは？'};
@@ -1169,7 +1203,7 @@ function screenLine(d){
     view:boxOf(L.st,AR_T,60,180),focusLine:L.i,onTap:(i,g)=>{
       const old=w.querySelector('.info-pop');if(old)old.remove();
       const s=ST[i],pop=el('div','info-pop');
-      pop.innerHTML='<h4>'+s.ja+'</h4><div class="r">'+s.ward+'　'+s.pax.toLocaleString()+'千人／日</div><p>'
+      pop.innerHTML='<h4>'+s.ja+'</h4><div class="r">'+s.ward+'　'+fmtPax(s.pax)+'／日</div><p>'
         +s.lines.map(l=>lineChip(l)).join('')+'</p>';
       m.wrap.appendChild(pop)}});
   w.appendChild(m.wrap);
@@ -1250,13 +1284,17 @@ function buildCheck(li,si){
   // 2. 隣の駅（各駅について）
   const inner=ids.length>2?ids.slice(0,ids.length-1):ids;
   shuffle(inner).slice(0,Math.min(4,inner.length)).forEach(g=>{
-    const k=L.st.indexOf(g);let nx=k+1;
+    const k=L.st.indexOf(g),dir=pick([1,-1]);let nx=k+dir;
     if(L.loop)nx=(nx+L.st.length)%L.st.length;
-    if(nx>=L.st.length)return;
+    if(nx<0||nx>=L.st.length)return;
     const ans=L.st[nx];
+    /* 「次」は向きに依存するので、実在の駅名で方向を示す（○○方面） */
+    const term=L.loop?L.st[((k+dir*4)%L.st.length+L.st.length)%L.st.length]
+      :L.st[dir>0?L.st.length-1:0];
     const dis=shuffle(ids.filter(x=>x!==g&&x!==ans)).slice(0,3);
     if(dis.length<2)return;
-    qs.push({t:'next',subject:g,answer:ans,options:shuffle([ans].concat(dis)),li:li});
+    qs.push({t:'next',subject:g,answer:ans,options:shuffle([ans].concat(dis)),li:li,
+      dirName:ST[term].ja});
   });
   // 3. この区間に含まれるか（範囲外の駅を混ぜる）
   const outside=L.st.filter(x=>ids.indexOf(x)<0);
@@ -1265,6 +1303,15 @@ function buildCheck(li,si){
     const dis=shuffle(outside).slice(0,3);
     qs.push({t:'member',answer:inn,options:shuffle([inn].concat(dis)),
       range:[ST[ids[0]].ja,ST[ids[ids.length-1]].ja],li:li});
+  }
+  // 4. 地図の穴埋め（区間の地図を見せ、１駅だけ名前を隠す）
+  if(ids.length>=4){
+    const blank=pick(ids);
+    const dis2=shuffle(ids.filter(x=>x!==blank)).slice(0,3);
+    if(dis2.length===3){
+      qs.push({t:'mapfill',li:li,blank:blank,ids:ids.slice(),
+        options:shuffle([blank].concat(dis2))});
+    }
   }
   return shuffle(qs.filter(Boolean)).slice(0,6);
 }
@@ -1290,11 +1337,33 @@ function screenCheck(){
 function buildCheckUI(q,area){
   area.innerHTML='';
   const L=LINES[q.li];
+  if(q.t==='mapfill'){
+    area.appendChild(el('p','q-text','地図の「？」に当てはまる駅はどれ？'));
+    const marks=q.ids.map(i=>({idx:i,kind:i===q.blank?'blank':'right'}));
+    const f=fitBox(withNeighbors(q.ids,q.li));
+    const mapEl=buildMap({view:f.box,ar:f.ar,labels:'all',marks:marks,
+      lv:Math.max(state.level,L.level),locked:true,focusLine:q.li}).wrap;
+    area.appendChild(mapEl);
+    area.appendChild(cap('橙の点線が「？」の駅'));
+    q.options.forEach((o,n)=>{
+      const b=el('button','opt');
+      b.innerHTML='<span class="opt__k">'+(n+1)+'</span>'+ST[o].ja+'<span class="opt__sub">'+ST[o].ward+'</span>';
+      b.onclick=()=>{
+        if(state.check.ans)return;
+        const l=area.querySelectorAll('.opt');
+        for(let i=0;i<l.length;i++){l[i].disabled=true;const v=q.options[i];
+          if(v===q.blank)l[i].classList.add('is-r');else if(v===o)l[i].classList.add('is-w')}
+        finCheck(o===q.blank,o===q.blank?'正解です。':'正解は <b>'+ST[q.blank].ja+'</b> でした。',q.ids);
+      };
+      area.appendChild(b);
+    });
+    return;
+  }
   if(q.t==='order'){
     area.appendChild(el('p','q-text','この区間の駅を、'+ST[q.ids[0]].ja+' から順にタップしてください。'));
     const tray=el('div','tray'),slot=el('div','slots');
     area.appendChild(slot);area.appendChild(tray);
-    let picked=[];
+    let picked=[],hadMistake=false;
     const redraw=()=>{
       slot.innerHTML='';picked.forEach((g,i)=>{
         const t=el('span','tag is-ok',(i+1)+'. '+ST[g].ja);slot.appendChild(t)});
@@ -1306,12 +1375,22 @@ function buildCheckUI(q,area){
       b.onclick=()=>{
         if(b.disabled)return;
         const want=q.ids[picked.length];
-        if(g===want){picked.push(g);b.disabled=true;b.className='tag is-used';redraw();
-          if(picked.length===q.ids.length)finCheck(true,'順番どおりに並べられました。',q.ids);
+        if(g===want){
+          picked.push(g);b.disabled=true;b.className='tag is-used';redraw();
+          if(picked.length===q.ids.length){
+            finCheck(!hadMistake,
+              hadMistake
+                ? '最後まで並べられましたが、途中で間違いがありました。正しい順は '
+                  +q.ids.map(x=>ST[x].ja).join(' › ')+' です。'
+                : '順番どおりに並べられました。',
+              q.ids);
+          }
         }else{
-          b.className='tag is-bad';b.disabled=true;
-          finCheck(false,'ここは <b>'+ST[want].ja+'</b> でした。'+ST[q.ids[0]].ja+'から順に '
-            +q.ids.map(x=>ST[x].ja).join(' › ')+' です。',q.ids);
+          /* 間違えても終了させず、その場でやり直せるようにする。判定は不正解として記録する */
+          hadMistake=true;
+          const prev=b.className;
+          b.className='tag is-bad';
+          setTimeout(()=>{ if(!b.disabled) b.className=prev; },450);
         }
       };
       tray.appendChild(b);
@@ -1319,7 +1398,7 @@ function buildCheckUI(q,area){
     return;
   }
   if(q.t==='next'){
-    area.appendChild(el('p','q-text',L.ja+'で '+ST[q.subject].ja+' の次の駅は？'));
+    area.appendChild(el('p','q-text',L.ja+'で '+ST[q.subject].ja+' から '+q.dirName+' 方面へひとつ隣の駅は？'));
   }else{
     area.appendChild(el('p','q-text','この区間（'+q.range[0]+'〜'+q.range[1]+'）に含まれるのはどれ？'));
   }
@@ -1786,7 +1865,7 @@ function screenMix(){
     const rest=document.createElement('span');
     rest.className='lchk__r';
     rest.innerHTML=logo(L.i,17)+'<span class="lchk__n">'+L.ja+'</span><em>'
-      +(key==='pax'?Math.round(L.pax/1000)+'千人／日':L.st.length+'駅')+'</em>';
+      +(key==='pax'?fmtPax(L.pax)+'／日':L.st.length+'駅')+'</em>';
     lb.appendChild(rest);
     box.appendChild(lb)});
   c2.appendChild(box);
@@ -1901,8 +1980,8 @@ function screenAdmin(){
   LINES.slice().sort((a,b)=>a.level-b.level||b.st.length-a.st.length).forEach(L=>{
     const sg=stagesOf(L);let dn=0;sg.forEach((x,i)=>{if(stDone(L.i,i))dn++});
     const r=el('div','lchk');r.style.cursor='pointer';
-    r.innerHTML=logo(L.i,17)+'<span>'+L.ja+'</span>'
-      +'<em>Lv'+L.level+'　'+L.st.length+'駅　'+dn+'/'+sg.length+'</em>';
+    r.innerHTML='<span class="lchk__r">'+logo(L.i,17)+'<span class="lchk__n">'+L.ja+'</span>'
+      +'<em>Lv'+L.level+'　'+L.st.length+'駅　'+dn+'/'+sg.length+'</em></span>';
     r.onclick=()=>render('line',{li:L.i});
     box.appendChild(r)});
   c3.appendChild(box);w.appendChild(c3);
@@ -1934,6 +2013,10 @@ function screenAdmin(){
 /* ===== ログイン画面 ===== */
 function screenLogin(msg){
   const w=el('div');
+  const back=el('button','btn btn--gh btn--sm','← ゲーム選択に戻る');
+  back.style.marginBottom='10px';
+  back.onclick=()=>render('gameselect');
+  w.appendChild(back);
   const c=el('div','card');
   c.appendChild(el('div','eyebrow','Account'));
   c.appendChild(el('p','hint','名前とパスワードを決めると、学習の進み具合を保存できます。'));
@@ -2036,7 +2119,7 @@ function screenStudy(){
     g.classList.add('is-r');
     const old=m.wrap.querySelector('.info-pop');if(old)old.remove();
     const s=ST[i],pop=el('div','info-pop');
-    pop.innerHTML='<h4>'+s.ja+'</h4><div class="r">'+s.ward+'　'+s.pax.toLocaleString()+'千人／日</div><p>'
+    pop.innerHTML='<h4>'+s.ja+'</h4><div class="r">'+s.ward+'　'+fmtPax(s.pax)+'／日</div><p>'
       +s.lines.map(l=>lineChip(l)).join('')
       +(s.spots.length?'<br>周辺：'+s.spots.map(x=>x[0]).join('、'):'')+'</p>';
     m.wrap.appendChild(pop)}});
@@ -2149,7 +2232,7 @@ function fb(ok,ex){
 
   if(q.mode==='map'){
     const t=ST[q.target];
-    body.innerHTML='<b>'+t.ja+'</b>（'+t.ward+'・'+t.pax.toLocaleString()+'千人／日）<br>'
+    body.innerHTML='<b>'+t.ja+'</b>（'+t.ward+'・'+fmtPax(t.pax)+'／日）<br>'
       +t.lines.map(chip).join('')+(t.spots.length?'<br>周辺：'+t.spots.map(x=>x[0]).join('、'):'');
     focus=[q.target];marks=[{idx:q.target,kind:'right'}];
     if(ex.picked!=null&&ex.picked!==q.target){
@@ -2265,13 +2348,20 @@ const SCREENS={login:()=>screenLogin(),home:screenHome,study:screenStudy,quiz:sc
  result:()=>screenResult(vd),learn:screenLearn,line:()=>screenLine(vd),memo:()=>screenMemo(vd),
  check:screenCheck,checkdone:()=>screenCheckDone(vd),
  admin:screenAdmin,revdone:()=>screenRevDone(vd),
- quizsetup:screenQuizSetup,stats:screenStats,mix:screenMix};
+ quizsetup:screenQuizSetup,stats:screenStats,mix:screenMix,
+ gameselect:screenGameSelect,geo:screenGeo,geoNational:screenGeoNational,geoTokyo:screenGeoTokyo,
+ geoQuiz:screenGeoQuiz,geoResult:()=>screenGeoResult(vd),
+ geoPrefQuiz:screenGeoPrefQuiz,geoPrefResult:()=>screenGeoPrefResult(vd)};
+const OUTER_VIEWS={gameselect:1,geo:1,geoNational:1,geoTokyo:1,geoQuiz:1,geoResult:1,
+ geoPrefQuiz:1,geoPrefResult:1};
 function render(v,d,keep){
   const sy=keep?window.scrollY:0;
   if(v){view=v;vd=d}
   const wrap=$('#screen');wrap.innerHTML='';
+  const topBar=$('#topBar');
+  topBar.style.display=OUTER_VIEWS[view]?'none':'';
   const bar=$('#userBar');
-  if(view==='login'){bar.style.display='none'}
+  if(view==='login'||OUTER_VIEWS[view]){bar.style.display='none'}
   else{
     bar.style.display='flex';
     bar.innerHTML='';
@@ -2291,7 +2381,7 @@ function render(v,d,keep){
   }
   $('#sigL').innerHTML='<b>Lv.'+state.level+'</b>'+LV[state.level-1].t;
   const nav=$('#navBar');
-  if(view==='login'){nav.style.display='none'}
+  if(view==='login'||OUTER_VIEWS[view]){nav.style.display='none'}
   else{
     nav.style.display='flex';nav.innerHTML='';
     const inAdmin=(view==='admin');
@@ -2316,13 +2406,799 @@ function render(v,d,keep){
   if(keep)window.scrollTo({top:sy});else window.scrollTo({top:0});
 }
 window.addEventListener('beforeunload',e=>{if(state.dirty){e.preventDefault();e.returnValue=''}});
-(async()=>{
+
+/* ===== ゲーム選択（最初の画面） ===== */
+
+/* ============================================================
+   東京地理マスター（新規）
+   ============================================================ */
+/* 23区の隣接関係。国土数値情報のような一次データではなく、
+   一般的な地理知識にもとづく手作りのリストです。お台場付近の
+   港区・江東区のように水面をはさむ「際どい」境界は含めていますが、
+   ごく短い接点（例: 世田谷区と中野区の一角）は誤りの余地がある
+   ため、断定はしていません。 */
+const WARD_ADJ = {
+  '千代田':['中央','港','新宿','文京','台東'],
+  '中央':['千代田','港','台東','江東'],
+  '港':['千代田','中央','新宿','渋谷','品川','江東'],
+  '新宿':['千代田','港','渋谷','中野','豊島','文京'],
+  '文京':['千代田','新宿','豊島','北','台東'],
+  '台東':['千代田','中央','文京','荒川','墨田'],
+  '墨田':['台東','荒川','葛飾','江戸川','江東','足立'],
+  '江東':['中央','港','墨田','江戸川'],
+  '品川':['港','目黒','大田'],
+  '目黒':['品川','大田','世田谷','渋谷'],
+  '大田':['品川','目黒','世田谷'],
+  '世田谷':['目黒','大田','渋谷','杉並'],
+  '渋谷':['新宿','港','目黒','世田谷','中野','杉並'],
+  '中野':['新宿','杉並','練馬','豊島','渋谷'],
+  '杉並':['中野','練馬','世田谷','渋谷'],
+  '豊島':['新宿','文京','北','板橋','練馬','中野'],
+  '北':['文京','荒川','足立','板橋','豊島'],
+  '荒川':['台東','北','足立','墨田'],
+  '板橋':['豊島','北','練馬'],
+  '練馬':['板橋','豊島','中野','杉並'],
+  '足立':['北','荒川','葛飾','墨田'],
+  '葛飾':['足立','墨田','江戸川'],
+  '江戸川':['葛飾','墨田','江東']
+};
+const WARD_NAMES = Object.keys(WARDS).map(k=>k.replace(/区$/,''));
+
+/* 区の見た目上のサイズ（画面上の外接矩形）に応じてラベルの文字サイズを決める。
+   小さい区(中央区・台東区など)が隣の区の文字とぶつからないように、
+   大きい区(足立区・世田谷区など)ほど大きく表示する。 */
+/* bare は「区」を含まない名前（例:'千代田'）で統一して受け取る */
+function wardBounds(bare){
+  const rings = WARDS[bare+'区'][0];
+  const xs = rings.map(c=>px(c[0])), ys = rings.map(c=>py(c[1]));
+  const x0=Math.min.apply(null,xs), x1=Math.max.apply(null,xs);
+  const y0=Math.min.apply(null,ys), y1=Math.max.apply(null,ys);
+  return {cx:(x0+x1)/2, cy:(y0+y1)/2, w:x1-x0, h:y1-y0};
+}
+function wardFontSize(bare){
+  const b = wardBounds(bare);
+  return Math.max(10, Math.min(17, Math.min(b.w,b.h)*0.34));
+}
+
+/* 23区の地図。2つの役割を厳密に分ける：
+   - mode:'browse'（既定）… タップすると区名が出るだけ。採点には一切関わらない「閲覧用」の地図。
+   - mode:'answer'         … 区名は出さず、タップした区がそのまま解答になる。「解答用」の地図。
+   どちらも render() は一切呼ばない（呼ぶと画面がスクロール位置ごと再構築され、
+   タップのたびに画面が動いたり、答えた直後の表示が消えたりする原因になるため）。 */
+function buildWardMap(o){
+  o = Object.assign({revealed:null,interactive:true,onTap:null,marks:[],mode:'browse'}, o||{});
+  const wrap = el('div','map-wrap geo-map');
+  const view = FULL;
+  const svg = sv('svg',{viewBox:view.join(' '),preserveAspectRatio:'xMidYMid meet'});
+  PREF.forEach(p=>svg.appendChild(tx(px(p[2]),py(p[1]),'lbl--pref',p[0])));
+  svg.appendChild(sv('polygon',{points:enc(SEA.map(q=>[q[1],q[0]])),fill:'var(--sea)'}));
+  svg.appendChild(tx(px(139.885),py(35.560),'lbl--geo','東 京 湾'));
+  const markOf = k => o.marks.find(m=>m.key===k);
+  const drawn = {};
+  let wi=0;
+  for(const k in WARDS){
+    const bare = k.replace(/区$/,'');
+    const mk = markOf(bare);
+    const f = mk ? (mk.kind==='right'?'#4FA85A':(mk.kind==='wrong'?'#D5555A':WARD_FILL[wi%WARD_FILL.length])) : WARD_FILL[wi%WARD_FILL.length];
+    wi++;
+    WARDS[k].forEach(r=>{
+      const pg = sv('polygon',{points:enc(r),fill:f,stroke:mk?'var(--yamanote)':'var(--wardline)',
+        'stroke-width':mk?2.2:1.1,'stroke-linejoin':'round'});
+      if(o.interactive){
+        pg.style.cursor='pointer';
+        pg.setAttribute('data-ward',bare);
+      }
+      svg.appendChild(pg);
+    });
+  }
+  /* bare（「区」を含まない名前）で統一して扱う */
+  function drawLabel(bare){
+    if(drawn[bare]) return;
+    drawn[bare] = true;
+    const b = wardBounds(bare);
+    const t = tx(b.cx, b.cy, 'geo-wardname', bare+'区');
+    t.setAttribute('font-size', wardFontSize(bare).toFixed(1)+'px');
+    svg.appendChild(t);
+  }
+  for(const k in WARDS){
+    const bare = k.replace(/区$/,'');
+    if(o.mode==='browse' && o.revealed && o.revealed.has(bare)) drawLabel(bare);
+    if(o.mode==='reveal') drawLabel(bare); // 解説用：全区名を最初から表示
+  }
+  wrap.appendChild(svg);
+  if(o.interactive){
+    svg.addEventListener('click', e=>{
+      const t = e.target.getAttribute && e.target.getAttribute('data-ward');
+      if(!t) return;
+      if(o.mode==='browse'){
+        if(o.revealed) o.revealed.add(t);
+        drawLabel(t);              // ← DOMに直接追加するだけ。render()は呼ばない
+      } else if(o.mode==='answer'){
+        if(o.onTap) o.onTap(t);    // 解答用は名前を出さず、コールバックにまかせる
+      }
+    });
+  }
+  return {wrap:wrap, svg:svg};
+}
+
+/* ---------- クイズ本体 ---------- */
+const GEO_ROUND = 10;
+function genGeoQ(){
+  const kind = pick(['where','adj']);
+  if(kind==='where'){
+    const target = pick(WARD_NAMES);
+    return {t:'where', target:target, text: target+'区はどこ？　地図から選んでください。'};
+  }
+  const target = pick(WARD_NAMES);
+  const adj = WARD_ADJ[target]||[];
+  if(!adj.length) return genGeoQ();
+  const answer = pick(adj);
+  const notAdj = shuffle(WARD_NAMES.filter(w=>w!==target && adj.indexOf(w)<0)).slice(0,3);
+  if(notAdj.length<3) return genGeoQ();
+  return {t:'adj', target:target, answer:answer,
+    options:shuffle([answer].concat(notAdj)),
+    text: target+'区に隣接するのは？'};
+}
+function startGeoSession(){
+  state.geo = {i:0, res:[], q:null, ans:false, revealed:new Set()};
+  nextGeoQ();
+}
+function nextGeoQ(){
+  const G = state.geo;
+  if(G.i>=GEO_ROUND){ finishGeo(); return; }
+  G.q = genGeoQ(); G.ans=false; G.revealed=new Set();
+  render('geoQuiz');
+}
+function finishGeo(){
+  const G = state.geo, ok = G.res.filter(Boolean).length;
+  render('geoResult', {ok:ok, pct:Math.round(ok/GEO_ROUND*100)});
+}
+function gradeGeo(ok, extra){
+  const G = state.geo;
+  if(G.ans) return;
+  G.ans = true; G.res.push(ok);
+  geoFeedback(ok, extra||{});
+}
+function screenGeoQuiz(){
+  const G = state.geo, q = G.q, w = el('div');
+  const pr = el('div','prog'), bs = el('div','prog__b');
+  for(let i=0;i<GEO_ROUND;i++) bs.appendChild(el('i', i<G.res.length ? (G.res[i]?'ok':'ng') : (i===G.i?'now':'')));
+  pr.appendChild(bs);
+  const ab = el('button', null, 'やめる');
+  ab.onclick=()=>render('geoTokyo');
+  pr.appendChild(ab);
+  w.appendChild(pr);
+
+  /* 閲覧用の地図：区名の確認だけが目的で、問題の種類に関係なく必ず表示する。
+     タップしても採点には一切影響しない。 */
+  const browseMap = buildWardMap({revealed:G.revealed, interactive:true, mode:'browse'});
+  w.appendChild(browseMap.wrap);
+  w.appendChild(cap('区をタップすると名前が表示されます（次の問題で再び隠れます）／この地図は確認用で、解答には使いません'));
+
+  w.appendChild(el('p','q-text',q.text));
+
+  if(q.t==='where'){
+    /* 解答は別の地図で行う：こちらは名前を出さない */
+    w.appendChild(el('p','hint','下の地図をタップして解答してください。'));
+    const answerMap = buildWardMap({interactive:true, mode:'answer', onTap:(wardName)=>{
+      if(G.ans) return;
+      gradeGeo(wardName===q.target, {picked:wardName});
+    }});
+    w.appendChild(answerMap.wrap);
+  }
+  if(q.t==='adj'){
+    q.options.forEach((o,n)=>{
+      const b = el('button','opt');
+      b.innerHTML = '<span class="opt__k">'+(n+1)+'</span>'+o+'区';
+      b.onclick=()=>{
+        if(G.ans) return;
+        const l = w.querySelectorAll('.opt');
+        for(let i=0;i<l.length;i++){ l[i].disabled=true;
+          if(q.options[i]===q.answer) l[i].classList.add('is-r');
+          else if(q.options[i]===o) l[i].classList.add('is-w'); }
+        gradeGeo(o===q.answer, {picked:o});
+      };
+      w.appendChild(b);
+    });
+  }
+  return w;
+}
+function geoFeedback(ok, ex){
+  const G = state.geo, q = G.q;
+  const card = el('div','card');
+  card.appendChild(el('div','verdict '+(ok?'ok':'ng'), ok?'正解':'不正解'));
+  const body = el('div','explain');
+  const marks = [];
+  if(q.t==='where'){
+    marks.push({key:q.target, kind:'right'});
+    if(ex.picked && ex.picked!==q.target) marks.push({key:ex.picked, kind:'wrong'});
+    body.innerHTML = '<b>'+q.target+'区</b>の位置はここです。'
+      + (ex.picked && ex.picked!==q.target ? 'タップしたのは <b>'+ex.picked+'区</b> でした。' : '');
+  } else {
+    marks.push({key:q.target, kind:'right'}); marks.push({key:q.answer, kind:'right'});
+    body.innerHTML = '<b>'+q.target+'区</b>に隣接するのは '
+      + (WARD_ADJ[q.target]||[]).map(x=>x+'区').join('、') + ' です。';
+  }
+  card.appendChild(body);
+  const mb = el('div'); mb.style.marginTop='14px';
+  mb.appendChild(el('div','eyebrow','位置を確認'));
+  mb.appendChild(buildWardMap({mode:'reveal', interactive:false, marks:marks}).wrap);
+  card.appendChild(mb);
+  const btn = el('button','btn', G.i+1>=GEO_ROUND ? '結果を見る' : '次の問題へ');
+  btn.onclick=()=>{ G.i++; nextGeoQ(); };
+  card.appendChild(btn);
+  $('#screen').appendChild(card);
+  card.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function screenGeoResult(d){
+  const w = el('div'), c = el('div','card');
+  c.appendChild(el('div','eyebrow','東京地理マスター — 23区クイズ'));
+  c.innerHTML += '<div class="score">'+d.ok+'<small> / '+GEO_ROUND+'　正答率 '+d.pct+'%</small></div>';
+  w.appendChild(c);
+  const b1 = el('button','btn','もう一度');
+  b1.onclick = startGeoSession;
+  w.appendChild(b1);
+  const b2 = el('button','btn btn--gh','戻る');
+  b2.style.marginTop='10px';
+  b2.onclick = ()=>render('geoTokyo');
+  w.appendChild(b2);
+  return w;
+}
+
+/* ---------- 地域選択・東京トップ ---------- */
+function screenGeo(){
+  const w = el('div');
+  const back = el('button','btn btn--gh btn--sm','← ゲーム選択に戻る');
+  back.style.marginBottom='10px';
+  back.onclick = ()=>render('gameselect');
+  w.appendChild(back);
+  const hero = el('div','hero');
+  hero.innerHTML = '<div class="hero__t">東京地理マスター</div><div class="hero__s">地域を選んでください</div>';
+  w.appendChild(hero);
+  const b1 = el('button','pick');
+  b1.innerHTML = '<span class="pick__i">🗼</span><span class="pick__b"><b>東京</b><em>23区の場所を覚える。</em></span><span class="pick__a">›</span>';
+  b1.onclick = ()=>render('geoTokyo');
+  w.appendChild(b1);
+  const b2 = el('button','pick');
+  b2.innerHTML = '<span class="pick__i">🗾</span><span class="pick__b"><b>全国</b><em>47都道府県の場所を覚える。</em></span><span class="pick__a">›</span>';
+  b2.onclick = ()=>render('geoNational');
+  w.appendChild(b2);
+  return w;
+}
+function screenGeoTokyo(){
+  const w = el('div');
+  const back = el('button','btn btn--gh btn--sm','← 地域選択に戻る');
+  back.style.marginBottom='10px';
+  back.onclick = ()=>render('geo');
+  w.appendChild(back);
+  const hero = el('div','hero');
+  hero.innerHTML = '<div class="hero__t">東京</div><div class="hero__s">遊びたいものを選んでください</div>';
+  w.appendChild(hero);
+  const b1 = el('button','pick');
+  b1.innerHTML = '<span class="pick__i">🧭</span><span class="pick__b"><b>23区クイズ</b>'
+    + '<em>「○○区はどこ？」「隣接する区は？」を地図で答える。</em></span><span class="pick__a">›</span>';
+  b1.onclick = startGeoSession;
+  w.appendChild(b1);
+  return w;
+}
+
+const PREF_PACKED={"北海道":["m}k_G_swzYezC|lGyjG|vBwt@~qDw{D`nAkaCx|GxoD~gX__@dgFwlSlx\\wqB|zOqzBz|CkdJnr@srKmtBszRunJydMahLqdFupIx@}jJpkC_qHk~BmmKjXkaK|bG_~JtsBgGvZu|ArsBze@~CuiCr{Fc`MfjPykGnbAmtKr{@fa@nAkaEd_@vhDnyB|FutC~nDh_An|Bh`CejBz_BopI_eEieCu{QirUstC}_LcjMa~U~aAfM{{CmdDu_IygUi~D}~U~MslFglCua@bj@wk@cbC_vKzuDxpKx_@ubVzo@qkF`r@he@z_@o{BmfAkeBjjAk@vvC_aPv{P}zVbgFir_@baMgjObdLobXnb@q{FnnEcjFj_DefR`gIecPpbB{~OtrEsaJtgC_u[tqFchHjkIwnW|xGivDvkJmuOwtCdt@wrHs`BkbJ{|Iu_DjXgwVolDom@z~AinHpfA{mEahBigAggCfeB~`Du|@nKwZyfA{uB~Fk}S}{K{pNefKezYwsZkdm@}c_AqeJ_oTesFasSgiDyjXzj@cmN|g@vfAuYw`CvsB{}@`a@f|@bGqdDn}Cg|Jmo@{}a@xsAawIpSy~QosFxdJodAnMqnFsoCiwDssEye@eqCr~@{aIpn@fmBbgDjZ`Fe|BzeDmsCgTmeD~u@}`Ciz@{_@zv@gwGqsBu|H}vD_l@q~AwqIwcEofA_EqgDny@eRot@_yGap@zqAdV~zFcvAzq@m`DgKozCwtEgZeuCrmAmhFe~EyyOdd@uoC_nA}eDgs@u_NvEuqKfmAciBn_Bbj@kd@kvCmv@_Xg{@pfBy`@}~CwwBxTmbAsgDw`Anq@mnIayBmTwzAfd@dm@dOcwAmqF{mEcZcfFtz@giB{cBklA}t@ucLicEavIikBme@od@reIko@zKt`BhbG{u@~mLdsDttDn}IjvRp{FzvDqwCpyQaeJxgN_}HvpF{sWnxEijEtlCqxDrSeiAdqCi~BbJx~@ypMrmB~aDmgAwcEx{@|d@_t@axBx~@re@it@_eD`x@cbDrx@bjAXkwBxmBj_@hT|~Hvt@}_DvLziC{d@utIglD}D{rBtzEq~Glv_@ieC`qAvFop@koNd~K}gJdp@{pEcbE}yIaVajM{_HukPezQywMwaCqjJaoLgbIwxByoAueBohOn~Bmb@n~AliAp~A`aCbm@xWtcB`yJ|sKtiIdsEdpQrla@tjDvoBheEdlKndFzqCz}Dz~JhjCrzA~{BhrFxtAzjd@umApaWkxCfkUomD`dLw`Gl~BeXaj@`\\t~@i|AvyB}tBwe@y]zz@yuHn^v|@dlGoxArhO{pA`zB~]nlE_lCx}YykEho[qyNdpo@m|Jhu[{fBhvCooBWuvAf~A_aIdoUchBfi@olLje[yzAzcCs}@sFbPbhB_|DdsIkoLpmKwqRng\\{~TziVw{G|_DytEp~GkuFxHw`EnyG_dF~`@mfArcDgzB~VsI|fCqxIdzLu_k@p{n@amKtoVoiH|fDgtDlqHsmDbs@meAjdBnhAjeI|wL~vDxlEpgLpLz{Dow@pqBzbBbkCumAptFtj@~YslAq]euE|~FtrGlaAr}E{kCfmBpIbuE`iDpe@r`CdzBojA~aJhfHrgFlRfgy@my^nxa@mlIfxU}[jsHdkChlVntBfkGhnFpnLlnFto@jyCn|r@y_BldGjQviEdtAxGb`AjTk{@bnBdp@ny@}y@_o@z|Az~Dt_@n}JjsKxq@xxDil@`qAxlCr_D|Aj`FvvDrtLlxNveJr`OebCvcI}vE|eMhbDfzRwoLviPf`@|{QfeQtmCj}FjlC{[_{A|yApeD~|ErzDh_Oo}G|{[iuAtqA}vBs{BedBl^teApqPn~Arm@nk@deGimApzAbvBvjAdTrnJu}@hgBogC@ki@l`FisBtwDyhAtyKq`Axf@s{@i{@srAbcBjM`pCi{AlmDkgHjwHpB~kBe_B`}AbAhtE~n@wt@fuB`_AzbBb~DkXphOjpBsrAprElrC|q@wm@f}ArcBtY}s@boEfgAz|F_uEzlFywL`fJgyE~}Ba_EdqDc_Aho@esCziFdt@p^buAmdAgMhcBbj@~hJh{TpvKjoG`wDlyFd|H~Kxx@plJizCfs@utEfcIfeM|aGrfDhzLdkEn~Cp~Axd\\rwAdzD`zIz`Hde[{_EzrKdwBzuJ|eJxvEh}@nqDqtB``D`i@fwDo}EpjA{kKviNmwGhSywKtxA{~EtgZoiTpxNce@hgCtn@zq@p`C|u@gbBtmEzYbkBfrAnAtqFzfFsBtuMn_Kb|PhgDfsHqVzgPkcG~mF}fHff@{aB_kAswDlJiwCp{DixIs~NkkJmyEkdSuJwiH_cFo}DctHpcAugN_qAwdBk}BwR{tKikDwyEcqA{jFudJ{vBknBw~Bo]mlGpyAooE|vDq{@haAjbAenBnnA`lCvy@|cCyx@{]_~BinCqbBe`@qiHhiE_}XtbEauH_bBmnOwrJggJzCi|GenBozDarBrq@{eArdEuhCeOqzBpnFsxBbpKIl|E}fCvuHszL`wIqoCjbG","ey~gGu|nyZez@mqAbCwbGycBl{BonA}bBbo@nmEcW`oCkcAfQ`\\ljDxdAwrEzsDyI","_bohG}kuzZrcGwaCowDg{MqcBd|A}tDyaDcJlkGmwAfeD`gD~{MzhCajF","ey~gGg|gzZnq@rNhi@qkBs}Au~BpUedCgvC_wC}`An|@pt@b_BtxAcVpFdcBy{@ji@tfAjc@gy@d`A~{Ad~B","imgiGwix{Zxa@u`OmaCbh@dHtbCeoAbgBdqAtYlsA`qE","_nh|FuumqYwGolEebAoeAwfAh_AsG|kEh{CvE","ykz_Gwj~qYzjAlT|wBwxDs|AgWsdBoaGovIaqCmnF`NetEisEigGyn@`zB~fCddBfbRpjAbuA~{Fj|BdhDimBzoIgI","ecbnG}hk}YvEqdDigBybBk|@h_A|}C`hE","ojenGcq|}Ynd@g_Gw_Boe@fz@veH","idusG}vr{YbgFepCtiAvjAh~@ysDmjGgpAupPnAikB{dA}eFptEb`CsI~l@reCsb@xiCy|CdnCdeBau@lw@r`AvyAulDd_GpfA~uHcaC","ivgrGecb}Y_p@{nFyaGm}GwqEtb@uhHdxGqWluH}fAgM{lAvmFbmFpxIx~DuQlYb|AxjIyuGzmEiyImCkwB","cu{iGgu|}ZnyAq_DxkAvs@sc@csEuoFaxBzkAs`DaUqhAcy@t\\qf@qkFguA{Tby@y{AytD_kAdg@q`@ujAkr@f~@mxCy\\}yA_nArsCsnAydCxb@yyAsr@kkB`v@swBurCaXoh@qkBwfA`c@tTrqAgoGvwIwOr~B~rCxOodAb}@rl@rk@}s@h`Bf~Byg@alBfmCtaE~hIlv@_Fjn@ocDvgAd@s_B|gDvw@zgAam@d`Ad_AfkPjuAvuCvoFogC~rCbhC|t@etCurBpEoJ}fBvkDP","keclGahmyZaCqoA}_DmN_`EsfFmhEwdSocH}tB}dEswGuqA}hc@k`GqiHk]cbDgfBlWocC_kC_fBukGsFihCplCapFo`DecGoqMgzF|xBtfEnxAjvKdVzcZmlFxdR{eDdsAcfD|`J{p@qKtv@ffGlrEvhHxzIfyDjbFzuGjjKzwBhvFlaGjkDtdJzoLbcIlgN`gQbdIvHncDbzKnwAx@ldGltNh{Bxt@h`IjjUx}GbtD~kAnuFrlAjd@piHmjD`gGj\\l{BuxA_`BuyJdP_rInvJl`BzdBihAupg@omFg|G{eKySibLaiCweLw_Hev@saGcaDkfAkzCxOmqAty@hDuAwpCm_EvuA}lGwhD","kpnqG{vxe[{eB}vB_cB_sHydT_rU}tEkgLuTglDqpE_xG}E_aDipEuuG}kAigQsiCoiEaVq_JwiCalA}mE}iJcoCwqM{LsuSfzAsjEetAyhD}AepFqoBmCovFqoEmsEzjHu~BdHulAuh@s_DwaJyqEpRyzDdrHe^prH`jBbjYnnFtcDjbAbuHlcExcCzaAtaFjcBty@`bAr{Ch_CbbBffBor@tv@d~BtyA}IdwAlvE`rBbj@zvAjjIl`EjfHrtCvt\\dF~yMmsAr{JguDn|C}bEjw@sVsz@q_DxeDcrJ~vAmmB|oF|o@hcCjxKjzItcLwpC~kErb@jt@__BrfEbjAniBxiDg_A~dChbAljHhgAxk@pFf`EbcIpeG|jFe]b~CxcHwb@l}Ki~CltDcRhpJtvAy|DzoDap@vtGrqChiDgi@d{@dfAvbBj}HtfKfmMnlFdfT|eLbmFvo@veGkjDxnFi_@tgCxn@x}C`iCrc@lwDewCtx@omLdyDoYxuEroAdmJ~mPzGllCejCbeDqF|oFb|@zElkAu~CrkCs@jlB|j@fnCtjEmtBluEw~ErdAxwFrlBhcG}aCtqHbvMroIr{AxcCyuOueDknGohK}nEg~G_pJcu@qbDdz@ghFcz@s|J}dEu{Gq~GexBejLqmKgs@koEmxB_eA}gCk|FqfBcuKqtCqbBocAilHugF{aHy{EirBq{Dm`FwuCt{FuhCmt@}uD}xEucAybE~Mg|FzaDsWxtDetI{mB}zKwSmuFlo@gwAibAkeA"],"青森県":["yv|xF}xoyYie\\|uDkpMkkA_wBnfAimCznDoyA`wItcAn`AySdhAr|D~eDnu@||EkzAnrEuzFvkF_nCvpIl{TjkBffB|pBoy@t`Hhi@lr@l_AkAzXetFboAglB~hGmpBru[bhCfvTtiH|vCbfD}E``Fz_GdiMacD`~ItWlmC~aCrdGh}J|tEtgA~iDzlDjm@wRneD`wD`~FbdEsn@mGsvHr|E{lCvpIov@phLrtAyi@cnJl}AmrCs`EyVcoB{}Gb}@u|CzqCwoBip@qlM~jA{wEm_B}yLp}@srBqPo_DaoDumAuxB}{FziAquAy]aqEvwDwWsd@gxCjmDmsGyIceCh|Bbe@`n@aiBfXicDkdCruAycBgcF`jA__F~fC_t@{FwyBk`Ds{GbtAsuEgtCgBdBisBc{AggBf`@ssEccH}fBcaBmkJ~vLjiB~jBy`EiVgcQjdA`g@hfKegBn}@xwAm\\jnBxbGjc@`_A`tAzwAatAxtCdiAlmF}oEpLerEayEwkKiRykD_}CpXyxB_oFs{AytNotEqpGp\\{iBylD_bFflAa_CfzArMxyAgiBkfAs_EezC}`Bn~@iz@_uBkwEQ}qF~nD_mJy|DcbH{qDeGefCghLmfCukDo`MtoQs`CphAjaB|aGaxDdeH{y@kZjbAwuD_sAdqFa}YdhJwmi@`yD_mAduB_@e`Bcen@hB_}a@w`IogCehBedIqLtyIrjMlsCrgMqIbzFapEr_O{xMprNuwBd}GeXf{KovJbhPh_Ch}AvbEugApiJjgG|yBf`EzxLb_BhtCncCrq@kk@|zJtcDn}G~DxkAb{AztH@xxAquBtUapDcrEclGulAouPo{CmtEbeBq{M{jJ{xQ_cCwg@~`CnuAgPzeAquEqfDuFglDfxIkuJnzKgcErnItjEt_Yf~ClzMjeIlcBp{Bnu@r~E}qAveDowDhiCsrC~_LbOd|CwgDy{@q`EvoE}eBnhLnuC~iB`a@c{@vn@fqA~yAiMbVhtCn{@woE|pExPpi@pvA|wAia@xuHtmJl{@zfIa_EneJgePnaE"],"岩手県":["qnbrFamqaZsaGzRifHzeF{yBSgoAklCucE~g@gbDp_CoDz{DicFdeDsr@rgDmxBxqB{oFrYqzByeBoH_|Cgv@s`@k|CppC_iCxlJsi@emAfr@oe@glAvvA{qA{q@oRyoDyuGl{AupJd`Hy~GhuByaOddMlfCtkDdfCfhLzqDdGn`EpmHurDpaJP|qF~tBjwEo~@hz@dzC|`BjfAr_EyyAfiBgzAsMglA`_CxlD~aFq\\ziBntEppGr{AxtNxxB~nF~|CqXhRxkDhiEvpIdAdmGelDluCdm@r|AjrAmDv\\v|EryD~pAj`CzmEbxAewC|zCzfBfrBivA~wBbb@z{Bz_Er~DsdAvoO~n@zyNicEvlAddDe~BveDhqB~qGbuGi[pt@m~EpeC}_DbnHjuGv~@tsDtbHqiHziF`A`rGpjCvL`lB`vAzLlM|bB`jBh}@|a@fyCzsDkhAdfF~kDtsB_bAbpCbhG~jEsRv`A~fD|pCh^rn@{_Dv{AxSjtEckEhwE|zAfRksCjtCcBrtEuyLvgAnEvsApxCt_BgJjkB}mGdoAnuEdwDzzCfvAobCde@dwAlx@cm@vmCr_Axq@gtH|fBhQpSs_A~fJtzGhgGkx@wd@mzHpaFggJtAerDbeAid@m_@w~@jgAwmD||Eu{EojAa`El{@}cBqdAc`Jv~@mzA`@{cErcCsl@p~BtrCiHpqB~vAz@uLcwBtv@V`\\_uBbxCrA~|@e}Cak@{sA`}Ay{ChbCc|@bDmgBarAsvCe`F}`B|TmgEkrDqZh~As_Dia@arB|dBebDmVmzAftAqbC|qBp\\oyA}lD}oDjt@_TyuDmqCfv@csBedBe~Bd|AodF_~FavKjs@}`Civ@{Ok~Cl_Ay_@}[cqGr_DabKggErI}PwiGxt@aoAhn@h|AtjAq@riA__ChfD{sAgzAmbDkaAt_@il@vfD{dAyaCgzAlc@lg@slEmtCrkAsz@tgC{gHyyBzrBqeAvvDds@dYmmDc_Bun@pd@euAi}AcxA~tBaYo\\{gIswD|oF}c@{}JgaApeIoeAh@oUzxAurC}Sh{@siHryBc|Bs~BuvFo~ArwB~\\`bD}|AlH_hB`dF}|@ixAzF}eF_gCqtEcs@rGhXv|Dg}@nqCczA_Btt@mpC}fAnLjYkfBg`A}nCyk@~Mh]iqC_yClUu^{`DeCrjEd_AloBc~@xm@rBhkCyx@ynAcfB~{AxIc`GkvAdUenBbpF_|@}eOelF_dDlgDn_OqxArhB{mB}pBxo@soCko@qqB}cCku@ti@xmB}xAb`AqhGooFbtBkd@uMulCe`Bsc@xq@szCgsDeRevCqkCgnA`|@dIjfBvlB|bDxtB|Xac@xv@`oA|dB{kD``DidBcuCni@uaEazCsIop@spBu_Ca\\th@szC}_A|`@y|AwxB}bDt{AeZ`aEm}M\\tAh`AfiLxaJoy@bvAgzDscDoaCxJ{@ynAma@xmAguEq_BuR|pBeqC_wB{qBnxAktBcgEyd@t|AyqBi~AmrAp|B_eEkg@kcA|aA"],"宮城県":["opfiFgw|xY|yBxeFdeFmTzdAbz@{[xbB`mAxiAtrBy[buA``Db`Paw@f|C`mAhcBltCfdAcKrp@h_CxbGxm@dv@pwEryAny@uNh|PzqDve@vsCiuAf~CpwArcEshMav@s`Abi@c}CqhBcXc[mvBtvBkeC`o@s}GtsDl`@roBuqBu}@_xLuoAsp@zfB}}Cew@_{BpcBaaBeFk{E`jAwjDhkAbr@pdDo{@bnAnjA|pE}{AfOejBzvBq_Bsi@}sBd{AqvHeg@gm@aeB`mFo}@k~@xaAq~E|@a_Gcn@ue@iePjIsrAupGvkAa}BcY_cAuaOteBmsVuaBafTwpHw}IekGcAwwCws@viHvKyaDgjA{V``A_gAelDktHwvBxrAzpAlyFakAux@oCz}BwlAggDap@`aB_eA}qD{rBrRykAw~C`rA_oBmo@ybA{}@dx@nx@wbDbhBbFdh@acDkhCo_BqiE{aQifAMGatBns@biAffAgrAsyA{h@tLwsLdrDi|@q`Cc{EfmA}e@u_@grBdjAv_AjTo`Bzo@fa@xBy_Djq@frDpkBnsAzc@q}BelAo}@brAyW{aAsgAfhCkiAnsApxCj|@ilBirA{_@btAoc@wKobBpwA|I{RqgBb}B}LhSmtAqlCkCyjAe_BomBdeBatAs{@ucEh|BxSxvCaq@ju@mcBy}D~}@gtBwwBsq@hp@bzCijCtyAtaCzxDa~Ci`@{uCjkDdd@{eHmjAepBfSx{@oj@xu@{i@ol@wSf|CszAijCm_CnLisBhdCba@h~@ev@q[vjAa~CiVirBdzB}LhOifCawBdSiwAekAyv@ncB_eBgMhaBduF_{Bf`@qr@rzCajBzYw^atD{gAyiBgn@pV_g@qpCcfD}a@qo@t}OsyDmGbk@irBisAwjAfd@c{Bm`B|[t@icD_mD{y@fhA_`A_RupBnhBkm@mjHsUnd@dxBe{EbnEezBcn@_pAexEkdAkW`YyhA}{Amh@u[sbDg`Ct}B{`Gk_AueBvsBoRwfAfvDooBsjCmmEpgEylAjjA_yCgxE`n@{mBjwBos@a`@idA|tBydAovAyoAthBeIymAghAny@ipDpeL|[bqGm_Ax_@zOj~C|`Chv@`vKks@ndF~}Fd~Be|AbsBddBlqCgv@~SxuD|oDkt@nyA|lD}qBq\\gtApbClVlzA}dBdbDha@`rBi~Ar_DjrDpZ}TlgEd`F|`B`rArvCcDlgBibCb|@a}Ax{C`k@zsA_}@d}CcxCsAa\\~tBuv@WtLbwB_wA{@hHqqBq~BurCscCrl@a@zcEw~@lzApeAnvHm|@pmCndAb{E}vEr`EkgAvmDl_@v~@ceAhd@uAdrDqaFfgJlo@pkN``FrkFfPzfC|~BzyA|vAbnEybAjwCt`Cj`IicB`}AviDdk@p`Dw{H`fI_oAtwAikGhlHjuFpoBF~T}fBtjAaDdeHbkCrh@nwAkaBhaGnvArw@hwKo~F|wDtvCpbAkI|YkdBbwCl[hwB{eFxrCcW~R}hAtsBfjCuD`jB`wChy@||Bij@naBt|A","c_mhF_vs~YccEnqB{`@lcC`{AzQ|hCyhG","yzrhFejd_Z}~CqU}fAvgC`|@bqBxoEmvC_e@{kA","mg_lFgcl_Zar@_mAemAb~AmiCqkA}`AdeAbcAjcCnhGcnC","i~}hFugo|YrcAg\\oEafDwt@hwAopBfBzu@f`@e_BdzAzoB_I?`fBhzA{r@wx@{{@"],"秋田県":["e}tpF{kzuY~ek@rwHpoMhbGhu@jvFhtAjqA~aD`ChxFniCdiDilAjjK~{ExEkiNxgA_aHolBgrAk`AutIx|FClyAqbIn{D_nFgpAg|Gv~CqN~t@cgDcr@smEhfCoxHqcC{qBfw@_oEzbEquA~NuzIx|BaxBbfIacArVoaCt_C{gBe`@qmF`iDkvCu`Ck`IxbAkwCye@wfBapDgaEgb@caDuaDc_Cav@kbGigGjx@_gJuzGqSr_A}fBiQyq@ftHwmCs_Amx@bm@ee@ewAgvAnbCewD{zCeoAouEkkB|mGu_BfJwsAqxCwgAoEstEtyLktCbBgRjsCiwE}zAktEbkEw{AySsn@z_D}pCi^w`A_gD_kErRcpCchGusB~aAefF_lD{sDjhA}a@gyCajBi}@mM}bBavA{LwLalBarGqjC{iFaAubHpiHw~@usDcnHkuGqeC|_Dqt@l~EcuGh[iqB_rGd~BweDct@_{CauRljEemLi_As~DrdA{{B{_E_xBcb@grBhvA}zC{fBcxAdwCk`C{mEsyD_qAw\\w|EkrAlDem@s|Ag`Any@ytCeiA{wA`tAa_AatAybGkc@l\\knBo}@ywAqrM~dAd]j}P_kBx`EcrLctBf|AdvJbcH|fBg`@rsEb{AfgBeBhsBftCfBctAruEj`Dr{GzFvyB_gC~s@ajA~~ExcBfcFjdCsuAgXhcDan@`iBi|Bce@xIbeCkmDlsGrd@fxCwwDvWx]`qE{iApuAtxB|{F`oDtmApPn_Dq}@rrBl_B|yL_kAzwEhp@plM{qCvoBc}@t|CboBz}Gr`ExVm}AlrCxi@bnJftMsjP`~XxxCzOktClBpfCfaAT}i@vt@tiEvbAfy@qn@noNjwE`dS|hOlgEpbMqpBhxEgi@`gGi|CrfC~bDrl@fyB_l@`i@{xBxw@ljBthBmIlqBgcAx[uqBlsEqb@jvAk`Bm_A_dFt_AmhCmgAubBfOo}DinAbxAf@yy@uiBaQmf@oeHbeBocIhcFm}G~kHkcEhbFmOmc@mjAfw`@sy@"],"山形県":["mdaiFmstxYqmGo`J}|Bhj@awCiy@tDajBusBgjC_S|hAyrCbWiwBzeFcwCm[}YjdBqbAjI}wDuvCiwKn~FovAsw@jaBiaGsh@owAeeHckCujA`D_U|fBqoBGilHkuFuwAhkGafI~nAq`Dv{HkuDkm@i{@xiAjb@f~Eu_CzgBsVnaCcfI`cAy|B`xB_OtzI{bEpuAgw@~nEpcCzqBifCnxHbr@rmE_u@bgDw~CpNfpAf|Go{D~mFmyApbIy|FBj`AttInlBfrAygA~`HyEjiNteCa|@hpDfk@v|OrqEbcC`zBsTy{A|p@iLhb@zeC`{C~a@ex@xbApx@ybAvwBfWnpVh`IlkE~mGnvCptAtoJtyO`pT~cLjfFaaJ{R}iCdrBccEjaA{eL~rSdxAqD_xBvgEguCpbAuwFsl@yfDpqAifE~xIo`Ih_JtvFlpFpkMu`AbdPvaEheBj|IsgAnnDpfC~bA[|RmsBlgB_JbjCllFbnFxAnbAd|A~qFsUrsDppB|kFetAtmEygGal@qxEtrEm_DmhA{_G~rDskDspCmnHrkBymD{YemFc{AwmAjrAc`CznHw|Bbn@yyAc`CymJbeCcnBS{mBvrCuqDcV_|CszAoa@_Xe`B`_AaxMk~Ju_KieDfdFmdNiNkwDgeBq{C`{@{{F{pBsqHxlAiDqzQsyAoy@ev@qwEybGym@sp@i_CgdAbKicBmtCg|CamAc`P`w@cuAa`DurBx[amAyiAz[ybB{dAcz@atDlq@"],"福島県":["knrfF_okxYao@r}GuvBjeCb[lvBphBbXci@b}C`v@r`A{}C||LfqZn}AheDgdF~aKpjK}eArkLf[vaCrzAna@bV~{CwrCtqDRzmBceCbnBvkBzfEtHzkEisIrqDkrAb`Cb{AvmAzYdmFskBxmDrpClnH_sDrkDlhAz_GurEl_D`l@pxEyg@{jEp~EknDzfKriOdaDvr@ptBn~CxgC}RltFffNdtF`DdmAyeBf_I{CppBgzC~|Ada@beAx~BioAtaGtiAtgHq~AfsBtRfkDhx@`pBt|GvvAi~@nyEbkAhjDhx@z{TxjFr_DrrBgyA~[yzBzrG}Kbz@laBf{A_f@jnEzhAzzH`gHjcGweE}}ActC~pGwjEhxIvoBteKm|C|iE~hBzcD{kAhlE|b@`wBjsBtk@kdAsgA_rC|~AusFwIghFprAkl@~SwoGeaB_zArBskC}vGs_Eo\\woC|m@g}@enAg_GgeCa`GcoAea@sA_{EkpByw@au@ccGw`Bqb@goAcnNcdCwiCdi@{eHmfEli@ufB}eBsyB}gKwIkiJn`BeyO|uAabC~EskF`zByhGnuCcqBf}A}wEdcGe_AsEoaH`yC~z@dhFooAvxBx}@jrAazDaRizBzdGmrErj@wpF~`H_jAfeB{|J|{DefDcjDctC_]s{Ck{E}tCmwA}oIycEldAys@xaBkyDidAzTekBl_FoiCbMkrFboD_tJaPwcDfvBurHgrD{]cpCkhCi{@{`HqcDsvFfx@ugCe{B{dDwwFwbEqwJft@ceJibDg}Qm]e}CucCx[x{@}sCzRykTg}CekV}Tiyc@jnCfe@{cCqfAneDsaKvMkvEvjCktHfJ{s@`lD_nDrUbg@pu@emGfcBbY~bAwkA`}BrrAtpGvgQjHvI~qGyaAp~En}@j~@`eBamFdg@fm@e{ApvHri@|sBurEdbGkfMs[enA~zDhJbkEcaBpgAvt@ntC{fB|}CtoArp@t}@~wLsoBtqBusDm`@"],"茨城県":["op}~EqtzyYsbWg{H_}AaqF}mDdlAeeBpiI`PvcDcoD~sJcMjrFqeGxvDlp@foBdxC|Rxs@yaBxcEmdAlwA|oIj{E|tC~\\r{CbjDbtC}{DdfDgeBz|J_aH~iAsj@vpFi~ExsCes@rgBnS`vDvpNd_@`yE_bBleJvlAfhHsgFxpA~|JrlAjaAlaFe_CdhD|e@toAqtAvkHx[lyGoeBlaBd_EngH|dDrqEkAtpCdmCoC|vCygBhwCrn@`jCvx@gI}b@nvGj{AoO`sA`bCqEjiHnt@aFjDtgAoeAdcBdkDvy@|wApxH||EjUkz@pfEqiAkOtdAziEr_M`jDxhFtaQmw@dv@nDhrArt@lAaZh|AdlHaWf{Gu`E||CkWth@ilF_rCyrBlcGagDt~HccKhkCms@fnCwgIj}CwJh|DksIpEwlDxeE__Igg@o`C|eAseE`uDibDcoB{tIjj@qzE{yB{jFvy@}_G_sEwfG}q@_~J}zBe}EjbCkmGeoCvyAm{DkuChhKu{QhdF{lCzmCiyMjjIekFxcGszLL}vEeuIduIimWl`PqlGo`@`jFxQ`}AjmEjrDkuAy{E`cC_r@plBxm@gxCo{@kiBiw@ik@ieDrcBcKsdAsg@d~C}pLpsFkgSniH_vMh~BevLhPykBmcAQ{uAssDwt@g\\guAavEayBcnDdmBumA{PM}rAcsAtbBRijBc_AYlEznB}vEyHmj@qlAk[zeAwy@keBu`NmwCwjHwcFwsC_ZyiB_mCi`EL"],"栃木県":["ygm|E{etrYfzAazCmY{vL|_@gfAheA`lAhwB}aAj^uaC|qCaLbm@}qCwgAqhEdz@ck@qkFwlQs_MajDudA{iEpiAjOjz@qfE}|EkU}wAqxHekDwy@neAecBkDugAot@`FpEkiHasAabCk{AnO|b@ovGwx@fIui@oaBPguBhbBsiAe@_tDkdAkbAgxGkj@ogH}dDmaBe_EmyGneBwkHy[uoAptAehD}e@maFd_CslAkaAypA_}JghHrgFmkKkkAasDr`BimLtRajAebB}pA~rCkfBemAehFnoAayC_{@rEnaHecGd_AaiJzaQwKr}F}uA`bCg`BvlOdo@~fPr{Dt}HlfEmi@ei@zeHbdCviCfoAbnNv`Bpb@`u@bcGjpBxw@rA~zEboAda@feC``GdnAf_G}m@f}@n\\voC|vGr_EfKneDxzGppE`IppAlwCrs@b_DmiJpkCxrDfoBtGnoAvqCvoC{Ql\\kbBfgE|bAxeCdvCjrKll@~}CwhLcZmeL|wCqpBxrDhmChMbeCbxBeUzeFvzCbrD{rBrq@noDvnMhfHfeBsn@bzEuqIrwBpa@x{BqlBdc@_bD~`ByQy~@sdM"],"群馬県":["grm|EkwdpY`[_uE~uEarNxJkpCyo@aCnuAitI_gBkfFfmKkcSmKmzKwtBetJxpC}fFs`AcaDotAzH{Km_CgkBpn@k^taCiwB|aAieAalA}_@ffAlYzvLalA~p@w_@zkDjqAx`K_aBxQec@~aDy{BplBswBqa@kcFjyIueBrf@aeM_fHsq@ooDcrDzrB{eFwzCcxBdUiMceCyrDimC}wCppBbZleL_~CvhLkrKml@yeCevCggE}bAm\\jbBwoCzQooAwqCgoBuGqkCyrDc_DliJmwCss@aIqpAutD_{CqpErfX~gAn}CgeE`iAw@~{Gc|FtjAaaJjmMrpFlc@zhErnGdv@xzNzbPinAsWhqFjhAtkBdkEpj@|oBmpArbC~jMyd@xqE|tCm|@hgEfuAmBvdBtjB`fBkwBhiJx}ClzA|rBluPdtAlaAwp@h_BtqAzlAg_@zcD~`B|hGd|Cw}Bt_Aj_@feAb_Jt_Ad|A`{BbSvbBhbD``Clt@hbCmt@b{AxeB~eIx~AtwImZbuA}yIx_ByOzVevDalAkRgIinAnlAstEcaBekBue@_aFl}AoyI~vSab@~xC|jIhqHagAfaBmmCrgBbiAxhCkxAdsAfkD}lBl}BhcAfjAviEeqCjI}oErnAiaAbkC_Blm@fyAhdG}rA`dCfnAdgBslH`aCadAda@}fCgpAsyBgaF_jCyY{rBzy@uoBkp@yhFuwFs_FwkB}uN}`EgmBd}@ipConBwvB|]uiFiyB_Aaa@ixB{nGuIc{OkzK"],"埼玉県":["gbe|EgnkqY}`AjwJxo@`CyJjpC_vE`rNa[~tEb{OjzKznGtI`a@hxBhyB~@}]tiFnnBvvBe}@hpC|`EfmBvkB|uNtwFr_Fjp@xhF{y@toBxYzrBtwCnaAxyCbbExzBeI`dDu{CdgEtt@xk@ioHriFauE_PkgGv|C{`FooAeuB_F_gE_wAuLgxA_nCeJskEorAomCxrCykFvcAayOfkCswGsf@i}Bt|@qoBbJuwLlwFoxCvTesGjpD_gC}~A{oSyqDwwGzjD_G~wAheDqs@ucEv_CfCe|C_cGzgA}tEenBo]i`Bi~Ca@wwFdfAcmG|u@mIwh@}hBmpClY}m@ghBllAczCe|@}qDvfCe^qm@wiA~{@ofBge@stBd_BeFaEgwBkxHb_@obEchAmpDb`AcsN~oK_xCzfAo|E{QekJr_Gr_Aj`Au{@`iFibUzcGmgAfeDdV`aAntA{Hr`AbaDypC|fFvtBdtJlKlzKgmKjcSlrAhcE"],"千葉県":["yzdxEk|~uYvuAwScEe_D}hBxu@hXb}B","gn~wEyhevYoGdiDnfB}o@izA~iCff@jmAdjBlUgZvn@tzAblAvv@o\\a[vt@t~@|t@vf@wcAiHnxAlgAd|@brBey@gmA~{AlrAhl@wWr~@vmAew@v_@do@_mC|r@ze@rdBr|Bcu@n\\~tBm|A_h@fO~cA|uAvN|aAhzGpzDrNr_BioBpcA`cCh\\g|@mBpyBzmAsv@uiBj|Hhq@ni@dwBi|B_cAxdCpyAp{A~aAweBr{@bnCdn@gSrXdwEnnCskK~mBvH~tDufCtfChDboCdqGn}Cfr@r`GsqCnzDj|AdPqqAfyAq[vlAjbCl}Dov@rUzwBvxAoaG|xCge@dsAb}@eh@zuC`rAdZpAfwKlmAzDlwCieK|xDks@rl@cqA`Xu_IonBoiImxCwhCu}CdQ{{GqiCgqFiuIqVy{EaqBwmAgZwiBcrCoNawAkgBiLm}Jcw@{k@biBk}@a^yhEy{BshBdU}rDiyBqaCxWurAdnAtGag@y_BitFylCwDqmD_~I{kDkhE~\\ayEeyAa_G~fCcfLaNgiMepDu_MwvIgcLc`NiiJqiPggBwpHf[_fGnk@hZe}CyqPrdC}uGgvGaw@oo@zpAp^paGgoGvwMkjIdkF{mChyMidFzlCihKt{Ql{DjuCdoCwyAkbCjmG|zBd}E|q@~}J~rEvfGwy@|_GzyBzjFkj@pzEboBztIauDhbD}eAreEfg@n`CyeE~~HqEvlDi|DjsIk}CvJgnCvgIikCls@u~HbcKmcG`gDhrA~`AdkJs_Gn|EzQ~wC{fA|dHkcGr~JwlE~wFdlAptGmg@nlAv|AhsLotFrvB|hEtjIpuARa|Bpu@c^og@_y@it@fi@`l@}|@icBawDu{A|cCwwAcwDe^jcByf@w}A`x@sf@wgBKlx@ci@cM_nCay@}IbhDoGjXwiBd`@x_BaR{bDnzJ}uL}eBxCnt@igBr~@zbAwq@uiBraAyHyZy}@jaDra@~PwzAhRr~ExuA}wC"],"東京都":["kd`yD_kgwYza@suBumA}`@ep@zbB~{Ats@","_kgxEaxhtY~SbkA|vA_|By~@gtBkrBdiAfeA|zA","gnpxE_jqtYcImnEutEwV}cCkhE_fL|sFe~AoxA`EfwBe_BdFfe@rtB_|@nfBpm@viAwfCd^d|@|qDyiA|dDhk@l}AlpCmYvh@|hB}u@lIefAbmGpMnbI~aE`rB{gA|tEd|C~bGw_CgCps@tcE_xAieD{jD~FxqDvwG|~AzoSkpD~fCwTdsGuzDpbAvPl~@omAnUwb@faCpAhdPgkCrwGwcA`yOmyC`lGbyAfmBdJrkEfxA~mCrjD{Wr|@c`CxgKkzAjuHwhGxlCmyGlZmpE|uBw_DnXc|DrjCwlBeU{hEdrCyu@jtC}fEghAmmErrD{fUv`JkpJdbDebAeLcbBwk@dp@egBqbAmlDhc@}n@rtAqrA}]go@geBnnC}GclA_eB{xEf}FfXbrAy}B}u@`|Bi|EgmAxOqxCa`FlfIoaYraDkuA|~@izCpgBmAwp@kjIplAcoFij@cxAycEhsCb~@tfCqe@dvAowO_gAib@}c@njA{a@m_A{nBnxAfzAos@ctBdrAtcB~~A{|BksCet@|GmhDpjA`oAkbAqlD","k}exEey}sYthAig@uQycEajFxvD`sDht@","{zwrEwttqYv`BugDlSidFsnBweAcuG~E}wFp~CooBhhK|dBzbAbkKkQhjByh@rZyaB","ivppEu|~pYfNkr@srJud@knBgsA{oCliAx`KpnF`cCaTv}AsvB","ottoEgzcpYbTujBgtBa}A`AomB{vDjl@ik@~}DfaIzjA","gwxnE_bmrYSebEogCycEmpEsN_fCv`Dxs@hrHnbAyWhkD`bCj~Cqx@p\\cmB","k}xmEgoesYqhBlyB~OtyA~sBjvAhuBeMpt@c~FkpBkiA}uAdj@","yq|hEeyctYbtAqXfsC}fHitDwl@oW}rB__Cz@qhB`lAaUngDmwFtlJ~e@h`B|gCbXpjDw~AjRcwCrlBoC","ai`eEqp_tY_SimCspC`jCrdDfB","mcdzCwwg}YiYgqBcpCl{@ljDxt@","o~`vC_wi}YunC_zJeoCsF{jB`gBrcCbkGbfGlM","k`pdDynzbZvPydBjr@xa@eJu{EubCveBvVhzAw~ApuAvpC`F","uiwaDgmrbZ`_Ey_@z]uiBznC{n@q|Eln@k~AqiB}LlsCctDyWp[~gCwjBgrBec@nlC|_AYgIhs@oyAraAjgHo}C","yuhdDga~bZ|_At_@qLv}BzvAslAt_Crz@m]{yAry@_uDqoB~j@F_|A_hGxeBqi@fkF|yAmSsbAk{AlcByl@","u~xdDakybZdhCkQswCa|Ac|BluApkC~W"],"神奈川県":["gunwEibysYel@efBymB|l@lcBztEfyAwlAua@{mA","oxrwEskvsYe_Be]~hAyTm\\mgAodBrEzzA{T_f@o|Aep@dcAasBuuAfsCexCnIuyAabAm`@caDpvFvp@jjIqgBlA}~@hzCsaDjuAcsGptSsv@hnE|hBvx@|r@|cCfmAyOwyBxoE~f@`eAnsAsAgXcrA`lEc{FpvA~mBomCtY~zA`}ApeGunBdgBpbAvk@ep@nP`dAghOrqMsrDzfUfhAlmEktC|fEerCxu@dUzhEsjCvlBe^nnDnoBrdB~mF_jBzxDzoAzaC}r@boEtxBt_C`xCdNpwFhrDlrB`cCtgM|aC`cDroBcKnlAhsAbp@v@lIwtOdrLqjBhuF~xAlbDbuDhhKukAduByrE~gE_v@vz@}sJqaAycGd_AcoDufAloBe}Dzd@elJshAmlIozS{wBwjO{_@uvSbwAwnFhQkkGgn@otAz{AcnAbG_uBzyFsa@twAipCj~AkVlp@etCxwBtoDfm@cmBxhCKxVucAcAbjB|p@ev@bCtmAth@yy@x`@pu@t^qwHwv@ku@bl@waAokBuM{V|iBm~Cz^mbC{oDc]_vFit@|gAmp@eZpXigAsgClmA~_@kfBu_BgpAqz@vtAqClbGw|BvuBqSks@o`Ane@i@rlA`nB~Dw_BzlBbPx{@s}A{QukByuCwLr{Bts@nf@oz@blAm`A_yEe_EvAgf@zqAus@g}@dSzxCqe@op@_c@pxAci@{oCgr@lxAoKmeCl~@eiBcbFsbCtn@j~AgpBlExs@vvAkr@oa@bElcC}eBrdAmfBkoBdXsmByj@a]xfBhb@g^csAgt@}cAusAxYfcAuo@gi@w}A","_rtwE{t}sYta@bmA~y@iy@oxBqkExZvwD"],"新潟県":["cbufFgwdpYptAp~L|qY|uj@z|KxoFb`ZbgHdeH~zE~pMpuQfjKfwDhgIjtG`pGdzSloRxsV|_Cz{D_XttAz{@uXzaB~cDklCuUn`EldCnpAhsNagA||ItvGfdHfnAvoGnrIvaQvqCdcMsmAee@lvBhmEj~H`ya@`xDwdEdd@iuGtlBey@h{Ejj@`kCm_CbgG~WviB{vBjzDsAtsAynAkgEsfJagLg_JmyCvzA_|Cmg@bd@a|Cg}@_nDriBubFup@giAli@asG`oCgtB~sIntDfcDg}HcyHezJzc@q{HwyCibHiCaiG|gDufBoP{cB}uKou@yxAwcClZe_Di|McbIgjE}gVtsAwyItoDmjBlsJhUhcCgpA_HggBdaDykArlDghL`rE`tAvvAebBpmDjdDvhGitEqkDktCrwB}dK}jBmjAwIsyBcyDk`A}tCl|@xd@yqEsbC_kM}oBlpAekEqj@khAukBzSqsFc_PppAev@yzN{hEsnGspFmc@`aJkmMb|FujAv@_|Gd`C}RiHq}@acH_uA{cDzkA}iE_iBueKl|CixIwoB_qGvjE|}AbtCkcGveE{zHagHknE{hAg{A~e@cz@maB{rG|K_\\xzBsrBfyAyjFs_Dix@{{TckAijDh~@oyEu|GwvAix@apBuRgkDp~AgsBuiAugHhoAuaGceAy~B_}Aea@qpBfzCg_IzCemAxeBetFaDmtFgfNygC|RqtBo~CeaDwr@{fKsiOq~EjnDbi@ndE_hBnyCy_D`}CcrDxj@ssDqpB_rFrUobAe|AcnFyAcjCmlFmgB~I}RlsBorFueCk|IrgAwaEieBaVczAvwA_iMmpFqkM__EqeBsvAspCkkBhEiuHtzHqqAhfErl@xfDqbAtwFwgEfuCpD~wB_sSexAkaAzeLerBbcEzR|iCa_EvaIhj]vtPtk\\vbBpnAkp@bzNhgF~nPrzNhrKfeSjpD_cBzO`nCen@yo@slBtqAjlEhuO","ii|eFwwqjYxpAtu@pnBexFiyC_bK`LomFevQcl]ey]{cM{y@zy@z_DveOukAluEkwB~fAseIgaBwdJ{fGatVkxDgn@rj@f_A`~IhtJpeChsAnqDg`@to@v~FlfFfuAzjF~vKr`FhcHfjHtpJlVdc@hjBtoBmqApwCjl@v_BaaDglFybCi]ixCp`BiwDlaDu_BryGtlJvnA~h@phCgfAbjF``CtyAx|I","mn{iFog|pY~wBh~CdkDvz@yaBomEu}EqdBh[~wA"],"富山県":["{vn}Ew`neYii@e}AxjEqtAjxAucGunAinJduEcdF~I}`IgyDuaByv@cpDo|DyrBewDdRcb@s{Aw`BaKus@odFqnBw^}KdaDsvCsRydEowKusChv@ctHilB{lOh}@_jBsgAwfAvtAkzDrAwiBzvBcgG_XakCl_Ci{Ekj@ulBdy@ed@huGaxDvdEb_Dbe[dfFbuLv_C~bAr`Dos@nlKx|CptGzpJv`@jf\\miCxbK~oAnUr{@}kAkoA~iFmhAe~Bu_ApiGucKjqNwpC|c@_dFazFieDuNosBstCeq@puK`nCroAygAnzBta@`iCzrGviI`wDiX`fB~_CpgHftAtoIw@fpDhuDxDnpCxaA~l@vuBucDzqAza@riBeuAhjIx|F`dHoo@jiBsbDjeGnhC~aD_n@fgEdyArr@es@~aBjmDvqAmE`wAc~C`iGqpAb|A`rCruGun@on@oyFc|Fc^uMmlDunBqd@zyC_XapBgiEheCmgH~vDyqB`zDjbBbb@coBuvBwhFyyC}j@q|@qeE{zGwp@c`Ai|EolAtQmvJyfLxPmtElaDshAwuEkeGrbAyu@otAudCnEe_EvmA}x@x`BdnAddAayAaiAmoF{tA{TaRksA"],"石川県":["afq~Ei`{aYsyFijFsiBduA{qA{a@wuBtcDyaA_m@yDopCgpDiuDuoIv@qgHgtAafB_`CawDhX{rGwiIua@aiCxgAozBanCsoAdq@quKms@o]suL`dAo{LmiAdp@x}EbnF|_BvyAdiCwK`oBmj@`aA}}@ui@_CzhCm{AcNgt@teDrmC~oDwl@voD_gAykAq}CzRbLwsCsyCqp@sw@`xAlw@zf@a`Apg@knHmvFyt@jg@eG}mCawAlnCsv@k{@fh@_eBipAzr@`x@wrBmjAsyBl}BjcB{Tcq@|dBkbAuIepBdfCsmDckA}lCaw@dr@orAcpGi|JeyDmjB_~HkbAaKzm@ua@dY_~MseB~Vbv@ss@o[yr@_zD}_CkN~{A}_BuzAvGzqBkcDjgAaiHubB{xAorEfJq}HcjA}oC{gE|cCczBgjAgcDv`DqSb`IrlDj_LnjAzzNzyJn}QtoFdxSoNz}Be}@pYlk@fzI|~Ed_P|zB`p@qR|eAnvCh`BnsGq}@hjFlgEfhB}NpxBdmCxgJf~@jgA{bBcnAmtCtsAqpBvcNb^llDuvCtgBnXt~A_iD`lFlMj~DrpBnx@{aBlfBgPftIf~A~~YlzMtyPrlMq}AjW`vA}I~cIphGfy\\hl[l~HfbLppAd}GrxI|wIfk@kwAvqCcm@~r@{`FpmDi|DhkDvQntD_{A~o@quAik@{_I|xEgaEqBkuCqcCorCtoAygCki@mxHppCmaGxdCarAncBycFvxCmcAssB}}P{hHk_DyqDhsAo}@wfE}vMelIklDv|G}lI`jC{uBoTe`AgbCaiGppAawAb~CwqAlE_bBkmDsr@ds@ggEeyA_bD~m@keGohCkiBrbDwtJ~\\","qttaF_ydcYseB`hEv}Aoz@gf@|~EhcBdpBmwAmQal@byC~qBm_@puB{oEpmCs]_qAq~Brn@g|@sdCk}Blj@s_Dgs@cyCajFu\\m`Ax}Af~CvsAfUrhC"],"福井県":["mwuzEipz|XtdCrc@nzFwmFnjHxOpiKy{MzfH_{Dp_EzAjl@~vA|pAonAdmCd|BzpBsn@fd@v_BziAqUcCjhAdj@_~@fV`bDmrCjcCigAmm@`HgfA}tA`@mqGnhCjv@m~AcvCjyBxgGblKltBiIiv@k_BrsAeYx_GtkAlvAekCp`Brl@`_@rbBmfAblApsChvCnCzkAm~Aff@lpA`vA{e@br@|{@thBwrB|xCov@_Oei@xcEv{@kD`FikBrl@fw@vV{}AtjArgA~o@moD|rB_JpsBpmBotA|lDxe@`w@~wEw_E_JpbClt@gL|XfeBk}CjtBoj@`zAjaAsf@lXvmAetCfy@eU`vEbsCldDta@}nDnbCaGkdBy_C`KwcD`KrpAbpErdAx{AvoCu}@luIx_B|zAohAxbLnGw}GupBw}Aq_Bz}@wt@}lCdf@avAenCdl@|wI~gP}\\dbCzr@taBehBdsDmqGycAmYzuBvxA`Th]gvAhnAhtDglAmOzPl~AsdDwqBtd@nzBboDjlB~pB_gDxaBO`fCpnBv}D{tFnlBsYmAksCvaG{XzkAu}T|nCmmJqgAeoBmCqvHm~DciC~F_gBumDef@`JytF~iBgfAuu@waDggBaNskAkcCmoFqJgwHwrCprEcaGwYeqCyoFuiCm^kgCvr@oaCmxAovAhgAcpCipIao@hlBcvIolEwo@egKjlDou@hzAyqDmhBqWoxFl{Bi_CAglC|sCq`HavBqpBmnArk@wcDchE}tEta@wuCuz@o|BmoH||B}pIUqoI`zC{eCokFmhBdbAgiH_qBkwBhp@imEcvBsiC|pC}lAa|@qwBpFymEucBmyAfk@sfBsz@qmCljAcrCi{Gw{Aq}@uvDobJjoBs{AbyDa{Bsz@}bAt|F}gEzByj@h|C{jIcd@e`CufEudBf{@toBndQwxClcAocBxcFydC`rAqpClaGji@lxHuoAxgCxmCbdEa~BzfGq`Bb^hk@z_IizBjjCovGlSqmDh|D_s@z`FwqCbm@kd@`{A`jGx`MzN`nHrjDagA|dCzpAqUslAdqAz`@yE`yAknAdK`eIjvBdhJxsKnaKdnBn`FfaH"],"山梨県":["i}|yE}oamYaq@t{Ag`E}_@s_AnaCvr@nyAccAr{Kx`DlaCaUn{E}mB~}@_lDke@iaDrsNj{Tr}Oo}C~dEjMxtA|~O|gIfjFk~HxlGl`JfgGeqA~gE{rFrmK{q@zpC{uBxqFkz@twItzClaIuvA`aF~aD`o@gwBpfEvNxiDicFknC}sFx{@mtEp{UqyFzD{yBjuBsmAlMocHr{@}tAwyD}tCgOumBk_UzbCgiBwnCykNjS_zCeiD_gAumCtoA{~AvvFmiAw]wtIr{FogBcfBwrZwdBqsDpeAmqC_eCkfGglHwaC_hE}rPirDmrBeNqwFyoIwqG{aC|r@{xD{oA_nF~iByiB_wA}uBv_DmZlpE_xCpgHejHrzFygKjzAs|@b`CkvArWvI|tEnoAduBw|Cz`F~OjgGsiF`uEey@ryHsAnbCpaBfiCduCr|@yB~rI"],"長野県":["atw_FsxhiY_tIotDaoCftBmi@`sGtp@fiAsiBtbFf}@~mDcd@`|C~{Clg@lyCwzAziJpzGrxIzkNzvOe{@btHhlBhuDqh@fId`D|xCphFrvCrR|KeaDpnBv^ts@ndFv`B`Kbb@r{AdwDeRn|DxrBxv@bpDrcEreCjcBuAne@cwDjxCstDtcFqm@lqOlnN`kCs]~j@_fBjqBTfgEh{Fh{D|VnxC{fDxv@maF~hKpvBn}D~_Ip{FjuB`O~aCt}GdjDl\\nlBcdBlsCtpA~pItsAxeBbkEfSlKv{ChsBru@jfDaw@p@}yIhaCeHndCy}LhgLyiEvhFqlHblGvdEbpCaxC~BgmEt}Azj@jsCqy@dkAkvEjtCyrCrsF@noCfpFz~GmcG~w@leBur@~lGdaCwoCd~Goa@fuC`gH`bDywArrDdxCfyEajE`bCL{`Ag{KsmBcy@ks@{iD`pAwgN`xBwyBw{@{oJqx@qv@nPs~CmsF_nCrU{oC{bCoaAqu@amFklBuyC|BweD}jEsyBksAmnCjl@uyEqxAcCc~A}rGmlD}iAu`A`qBy{A}]gd@lqB{kBrLa`AeOsO}nEuu@q^}aDiZsc@vwCokCpJ_mCybC}aA|fBi_DkwBd[ojDsdEqfBssCjOilAe~AelDp}CggGdqAylGm`JgjFj~H}~O}gIkMytAn}C_eEk{Ts}OhaDssN~kDje@|mB_~@`Uo{Ey`DmaCbcAs{Kwr@oyAr_AoaCf`E|_@`q@u{AxB_sIeuCs|@qaBgiCrAobCwzBkz@}~IfaDgg@`tC_{B|v@egBrlHadCgnAidG|rAmm@gyAckC~AsnAhaAkI|oEwiEdqCicAgjA|lBm}BesAgkDyhCjxAsgBciAgaBlmCiqH`gA_yC}jI_wS`b@m}AnyIte@~`FbaBdkBgbA|cH`lAjR{VdvDy_BxOk}Ap~IowNaLazFwaDibClt@a`Cmt@wbBibDebCqXo{BatLktFvp@woAeuFdb@ymCuqA{lAvp@i_BetAmaAkqBonM{iDpp@uqAvuBqmDkdDwvAdbBarEatAslDfhLgeC|Xm|@beEgmM|NuoElaCus@vbIfjE|gVh|MbbImZd_DxxAvcCfxIt@`{AfcCytDb|BhC`iGbvCpmGsZ|`JnsHpiJgcDf}H"],"岐阜県":["qfevE}ph`YdyCkmCbnApQnfGsuItnDyqAn`@mxDwcCsE|`EsdDm~Sk`@wlIqhHq|L}gGncA_{KegBa`Eom@mqJgzBmiFicCsO_WuuC~eCz~@rfCctC|gBk{GtlD`BrFybCflBj\\vpAoqBxoAhBhHq|AmcAyd@pgC{nGiTcyBl{DcdCaQedF{vEmbIeCemE~kBmcFbbBhBsMiqFfuBaVnDa|D~kBksAg{HgtPa|@hJb@ciGmgDnYqoCmbHe~Gna@eaCvoCtr@_mG_x@meB{~GlcGooCgpFssFAktCxrCekAjvEksCpy@u}A{j@_CfmEcpC`xCclGwdEwhFplHigLxiEodCx}LiaCdHjBnnIkvAvsAezDyu@oYylDckEgSusAyeBupA_qIbdBmsCm\\olBu}GejDaO_bCq{FkuBo}D_`I_iKqvByv@laFoxCzfDi{D}VggEi{FkqBU_k@~eBakCr]mqOmnNucFpm@kxCrtDoe@bwDonBs@gIhaHeuEbdFfA`|D|pAfqAmlAt{Hg{Ep|Bj|@pqDztAzT`iAloFedA`yAy`BenAwmA|x@oEd_EntAtdCsbAxu@vuEjeGmaDrhAyPltElvJxfLnlAuQb`Ah|EzzGvp@p|@peExyC|j@tvBvhFcb@boBazDkbB_wDxqBieClgH`pBfiE{yC~WtnBpd@tMllDb|Fb^na@joF`yEe`CpBivBvuBinBdoMtjIn}@vfEjcCgxAz~HffD`aCwcAd`CtfEzjIbd@xj@i|C|gE{B|bAu|FxeCfu@zpAwsDlpB}}@~~Fsl@ro@zrD|uGnpAaeAj}Crz@pmCgk@rfBtcBlyAqFxmE`|@pwB}pC|lAbvBriCip@hmE~pBjwBebAfiHnkFlhBazCzeCTpoI}|B|pIn|BloHvuCtz@|tEua@vcDbhElnAsk@ptCblCfnEmkAlXozE~nLre@yP{zBjwAot@{rC_eDveDyhAxQ}cBhgBw_@b{CftBlrBa|AdVesB|oBic@vwDvxAhuDkjE`yBviE|iB|GnZaiAtjJzaExhEec@ryAnyBh{CuxEwcAatBbnAk|@s`C{{CbN_zFmkCqfC"],"静岡県":["mypxEuyrjYhlAd~ArsCkOrdEpfBe[njDh_DjwB|aA}fB~lCxbCnkCqJrc@wwC|aDhZtu@p^rO|nE``AdOzkBsLfd@mqBx{A|]t`AaqBllD|iAb~A|rGpxAbCkl@tyEjsAlnC|jEryB}BveDjlBtyCpu@`mFzbCnaAsUzoChq@hfAbaEtfAoPr~ChcAvxBtkD`wCf|AejCxdByTaDpuA~eCxx@sXnnAlwDap@n~@bq@mXzzAffCfOtjGnkJpdEzdBjbEwe@hgDleEtMpkB~vHnhBr_CfpGjkCt`AkJl|EvqBvpH|fCz`BnzCad@njAjdBhzChOvgHomBdpDti@ec@_~QvpEohi@gaCsuRhLumMzeBkkObmI{c`@m~@uh@qwDllFoyD`B}gJmoDgyFcxKu{Aq}AyW~_BzKglAanH{}EwwG~kAlL{y@smGohCgyLcj^uzDghByf@rkB|oAkWsm@t`B|`C{m@vt@|t@yzGvv@wKiyA{~@~Avr@qSao@n@tAenAsoJkzEskE_cZcaAljA`cEqdXhwGotJ`lCuhAiEq{Bd{DnxAms@bq@jdAptFyx@~~A?jaGmj@}B`vAlw@xwE~_AlfAcp@sj@z}@fu@fZ|yJ_kDjmClnEbuBpMhrA_fCh_AhcBtcCgm@cn@nk@bt@|v@|u@guAtiAlgAdyFirCdoEfjFx|EUyBqfB`xCggCeMiiArz@uGn\\`lB~vA{M|yFudLuhAm_@ufAu_Gq~@kCp_@wxAouGunGpEmbBb|Bjc@kFq|BkjA}v@_q@ryAadCuFgwHu}CagCamDmIgcCe_@ni@y|G}cFcnE}Y_hDysHy~HecBsuCtJtU|fAsmBvg@cYnvD}hDbbBat@oiBo`Fo@mw@|_EsrGao@emGyvEmy@xfOmyCxJu}CnqFaxE|gAgoDvBmbDcuDiuF_yAobMruBzDtiO~dCjfGqeAlqCvdBpsDbfBvrZs{FngBv]vtIwvFliAuoAz~A~aFzwHxkNkSfiBvnCj_U{bCfOtmBvyD|tCs{@|tAmMncHkuBrmA}k@tqCotTvaFy{@ltEjnC|sFyiDhcFqfEwNao@fwBaaF_bDmaItvAuwIuzCyqFjz@{pCzuBsmKzq@yZhtA"],"愛知県":["ma`uEwcnbYf{Br\\b_@w}@vB`}Bx|CviBfq@cnBcMx|Bvc@jc@dL_bApbBbhBml@vkA~uAqqAduAtpBf]ys@laNdl@b|@edAc}@g_@|uGkpDbyMtaDdbDo{B|wEgrL|e@mpG_{Erj@wzFhdIakJyn@jBmqAeyEbo@zTcjAmnAif@gB`hAye@o|@h|@gzA_a@}`@u[xj@kxMctCllKmPboFjqDpJqy@b\\f`A~|AwNx`A_o@hf@mjE|sFsxDc|@}tHnhAmfAq`BozBhv@qsCwa@igFhs@az@xcAj{@`O_|@{lG{_Bzb@}}Bo|BoMntBedG{b@anGdtAy_BfUtrAhwAq_@sIskCxdAhaAdcFVp`@qcE~s@vtBgb@dwCtkCPlBsfBjz@bhBp{@sRnLr|CosA{YIc`AiuEI_QrcB~|AjoC`vBeBmy@vgBdk@`oA~~@caA|qAzyBwPvaBhqCvvG}DxnEf`A}cAhcAvdClJhhB}|@eW_wB~bFf|NpuIoo@azUaaIwoa@{uEqka@epDui@wgHnmBizCiOojAkdBozC`d@}fC{`BwqBwpHjJm|EkkCu`As_CgpG_wHohBuMqkBigDmeEkbEve@qdE{dBujGokJgfCgOlX{zAo~@cq@mwD`p@rXonA_fCyx@`DquAydBxTg|AdjCmvDgyEv{@zoJaxBvyBapAvgNjs@ziDrmBby@z`Af{KabCMeiEpkE{mFcaCvh@fjH`|@iJf{HftP_lBjsAoD`|DguB`VrMhqFcbBiB_lBlcFdCdmEzvElbI`QddFm{DbdChTbyBqgCznGlcAxd@iHp|AyoAiBwpAnqBglBk\\sFxbCulDaB}gBj{GsfCbtCkbCo|AlLnxCfjClj@r`CrzFbg@f`JdgB``EocA~zKp|L|gGvlIphHdvS~c@p~IchN`lJ_}Brj@kpCotBtqApYyzBykCjU`GonEquAmSiElzAanBot@a@y{BpsC`\\xOooAebCbAvo@yl@erB}d@aa@}yBhjBep@rx@vjA","iyysE_w}aY~aEwwAcfCat@k`BfeBnd@pf@","a{xtEwz_bYh@ynDyvBlq@JjaCbuB_D"],"三重県":["gggqEaxi~XbsAtpT~~FffDr~By~BdkFynAf{BuhD~zAhwEttH}eFbtCjiCltAqt@ztC~~Cx_@cdB~vCmc@~eGj~A|lCiQttAydBoBj}C|wEvEpcCokAwtAh|J`v@hhAw]rjAp|EvvCzvEufBzcAznA_eAteCjtFbdAutAhfFheBpkAnn@_eB}NlxFprAwJwIzfBj_Den@_bA}^`q@q{@z`B~UwL|uBhjA`gAagB|]`xAlv@b_H{\\vyAolEbwE_cBp{@gaElfCeSlfAkjCrFqmAauAcOtnA{uEcuWkoJwlHk_HttAqlA}wAwYDi`Bmu@bgAmYgoAsvBbGh`@qhCjnAnOjB{}@_j@otBy|AnCw]vaBsZcdCvnA{h@oeBcm@tGgxAooDn~@~eAbuBop@rcA_kAesCahBpX|{AkzFdUp~AblAmIsKulEoiBaHkz@b_BxVa_AwhAeXss@lsDnUgbCajAwlBqaBhcFadC`FkHyz@eJfdG{kAx}@qfAw|EasArs@qsDgzFjg@io@dzBzlDp{@cOh]}s@uxAen@hcCeAo_BqrCr{@mf@anDsrBcPvcEuw@qo@q`Ad~AcjAqz@ibAbt@dUeeAwmCgwA_HscEocBgT`Df}Ag~AyzDncB~Kzd@quAyxDubDv@_z@xcBzFygBy}DHmnC}kCqRec@f}ApKacBsdA}z@|s@}n@zWvqA`jAsLr[c}Bhq@lDu[mvA{m@qwAii@rxC_ZuwBuxAnbAvgBo|C_nFltAndAetAy^ehAbpArXsrBsxA|jC~Ura@{~@elBe}@i|Als@jm@scA_|@fHwz@meEdvAmY~FbcBif@{L|p@j|@bc@{rBgLfw@vgBo_@gFoxB{fDseEeYkmCePz{@wnCufDjh@jyFawBqdC~SqyAiaCxeAbj@s|Aoi@g{Apo@vlA~uAm[izCcaAm@svAfmAxGu~@qj@lSuqAl{B|`As`@xiAxaAw_@{d@deAzxFx_Ay}BioEvhAikGo`@p`AsoBmv@nCq{ArtBpXhq@cvBq~@_xBc~@zyBmyBq}Aj{BzGkd@ifGx_A}@lQj~BnkAgpFnP`iFvyAeY{t@cjApt@mmBl`@txA_j@g@ziAjoAseAhu@`x@rzAc}@nEcb@l{Fzq@`{Bb}@qxAhwAiaO_~Ac`@wS{xBms@vNma@}bEizBbjBmiBen@gzB|uAsxDmaE_BxgBdnCj}CagCtNru@jjA}yA~a@`mBj|By_BnvA|f@igCg_AmnAnr@obAeiAi`AxZ_u@qbBpi@xj@a_AgbA}n@z{AiwCekCtQkxA_pBqmEr\\ep@r_D|zCddCwaCgs@_oA`xB_jAolA{d@vyDu}CryAdKhu@hiB{YzNxkAasCfe@iJ|dFskE|{H_aBxzIqsEfdDanCpjOzr@fp@gTl}B}_C{_C}{ElCo^gx@upBd`FqdJw{@crXuqRacDu_Bu|D`GeO_cCo|@~qBpq@~l@o~@ll@s^}cAmb@dk@lBcs@ygE_YazAw`B{G{sEaqAnMcdB{bIj}AysAqQg{@c_JroCgjIrrNauDxhBhqBvm@o`@lxDunDxqAofGruIqeFdrA~RnpBttBt}@cN~yFp~BnrCalAveA|`AtaB|dEjg@jdCkqG|rAiN|fC~wBri@klAlaGtnApaBqf@rjBlsCjlLjKvsDx_Cb{@`lCxgFdh@nfHjpUyjAxgI{jB~yB|WzcHysBv`C~dAppCprArJ|]oqFf_AgK`eCjhChQjqBx}Cg[rgCtvLhcAerAjhCb^xpEmuFteAeLto@nfBhk@keCdmC{dAtnC|fC_z@~zCn|@c}CdlBqu@lpHbhDvaBeuA`pAgyHv`AqW{|AgtCrF{iBzbG_eBm|@awGteDfK`z@i}AzlG|qC","_}rtEcncaYplCx~ApZy_B_wAwiAig@xdBot@qvAtKn|@","mbnqEwklbYfg@upA}_Da_Cbu@~zDpaAvT","yavqEwklbYnhBvmD_iA{bJioB`Sb`AtwEtNsv@"],"滋賀県":["sc{sEglv|X~cDmQ_Qa~AhfBys@ye@ktEbnBuGv\\qjC`jC~kBbw@{eBkfCinKy}Cf[iQkqBaeCkhCg_AfK}]nqFqrAsJ_eAqpCxsBw`C}W{cHfuAchAdlA{jFfSymC_fBgdDlWo`B}wEsiMygFeh@c{@alCwsDy_CklLkK_}AsoCeoBvb@maGunAsi@jlAweEcuBoyCx}GqzD_k@{bDtnFsyAoyByhEdc@ujJ{aEoZ`iA}iB}GayBwiEiuDjjEwwDwxA}oBhc@eVdsBmrB`|Ac{CgtBigBv_@yQ|cBweDxhAzrC~dDkwAnt@xPzzB_oLse@mXnzEi}Fdq@kcCf_H@flC_dCxdDb`@~rExqDlhBnu@izAdgKklDnlEvo@ilBbvIhpI`o@igAbpClxAnvAwr@naCl^jgCxoFtiCvYdqCqrEbaGfwHvrCloFpJrkAjcCfgB`Ntu@vaD_jBffAaJxtFtmDdf@_G~fBb{F~fDzvDyvGzyFgaCamAasDdf@qMneKncEvlKakD`xRnhC~aAl|BdmCkzB|{@{DwLv|AbrAscBb{@dz@WsiCj~ByQ`xCsdD~tIzjAfaCs~D{jCmoGz_BuM"],"京都府":["oejvEwhf|Xef@pM`mA`sD{yFfaC_lDlvGqfAo\\lCpvHpgAdoB}nClmJksArlUgzF|IlAjsColBrYw}DztF{hFanBo_CjfDakC_dAgz@gbDrExkAoxAxx@vTtqA_`FccAbpAbrDrtCfj@^xqD`~@ps@ia@dbAjvBzaEwj@zo@r|GyRdJaaFgxAg`BnkFkQnJheDcrAeq@qXpgErwBn@|tCf~DitKm}Ai{@hs@fsA`qAmPdvB{qBdhC{f@rsDa_C}Kho@sdA_o@scCe_A`tCmnDi_@nrFzcIrvB{Nj@twAq_Ek@suHcdIyrGm~BmbAmlCxbAFnOy|AwdE}c@eeAnjC{wBoLki@x}AshAgDiHdiBizAtKg}B~dEn~A~eBqTbvAdlBj`Hoo@~q@viA~wAhc@bpFbwAdB|qBpaDvnBnqEgOnsFvyDbqCdvAdfEfIzgHu}@kKwHrpBbhF{f@~hE|zB|oGwzJpiEqjA}AkrEedCkkEgd@ycFjdEq}AjdArnA`U{{@fvBri@`jE_fBpzEfRcP|sBzbBlbAps@hrDkpCv`EzQliDjzJv|A|pEkm@baCeqMzbC}dAz_@kaHphDicA{qDgzFr\\krHpaCa{@ftA`kA~rCygGpyDt~@~jAgtBy\\knC_hAsTl@}eGte@mbBv{BtfAds@ww@ij@klIxrAaDvm@gkHvdEbJzq@qdBbtEd}EduGcoAeFkoDfy@kaAga@uzBtqBufI`sFlhA`z@}tAaQq|BrpDwcDsk@gzFezAh@rU`qByu@w@dp@|a@{wBgb@}Lq_Bw_Bfb@`@_{FvqAq`@|yD~tBah@snEz{@agBx~A~E`_AmiDz}HsvBeEaoAncHcqF|wClnBlzH_gDveCmgQuTe`GmlHauEhkBeFxPikBobAcjAjuAarDvvBeO~v@kiG_yD{wAiN_mAcuB~fDkhCc^ieB`jCmaDkeBw\\pjCcnBtGxe@jtEifBxs@~P`~A{dGb`@zjCloGgaCr~D_uI{jAaxCrdDk~BxQxBdgCe~@ww@ihA~dB|Bc~AcjEf`C_bAm|B}cR}gC{`LnjDoeKocE"],"大阪府":["kuorEmmqyXrw@qrCblByUzeApd@{r@bf@fqAbs@gd@pz@~iBsoCyR`nC`hAuJoHazEvm@yIpAzoA|MygBhFlcBhsBgMczCrbDfuBgSjExt@iuCr^cd@ptAfrF}s@`UauE|_D~mAlaDzeGadDnhAx{AxdAle@yfAljF~Owm@d|@lw@_e@vc@fu@}g@nDdbClx@ah@|GbbCrhDjmAbLyg@~\\l}@iIdd@r{CxmB~e@`aC~vFtsDv|CleBpwL`sA|nA}s@|z@hhArhFza@snApoAdw@|uC{zAgjAabFzz@mc@}[e_Ew{@k`CiyBoPzl@aiBa|AuuDiL}oDnsBw_AmyAcdAuQgdDcqB_t@tZwlJkpBwlFjGc|D{_B}yBlaD{rCatFohLsl@m~Ma{CqbDm{AdaBi_DikCwzMxz@axBtfDi|FkcEygBld@gf@h_DatLsqDauCbb@qgCk`Es}B|k@a`AesAw`DbC|YyhBieDi{BocHbqFdE`oAgvFjkAufCttEweBGgx@jpBjk@p~D}yD_uBwqAp`@a@~zFv_Bgb@|Lp_BzwBfb@ep@}a@xu@v@sUaqBdzAi@rk@fzFspDvcD`Qp|Baz@|tAasFmhAuqBtfIfa@tzBgy@jaAdFjoDqrDlH}jAblDtgB~dCz|@{sC`fGa]tnBjqA|~@{xAwG}hChyAuz@oA}{Cfp@kEia@moC|hAieDvx@v[uLzvCbjAv_ChcBgjAqXg}AryFjyAtXnrAjwEpKzeDueDllGmlBtrDrqAthCzvFdlBq|Axo@pvA|d@ydBptAr~@_VuiA","g}jrE_ilyXgc@wkAbo@~\\ln@wzAsl@cyBq{Aly@ba@xpEvk@sF","eozqE{imyXbbA`e@~gAkjCawDyxBvdBp`CyeBjbA~k@dY","yvfqEi~jxXboBxnDsPalDlu@`|@ru@qt@{tC_iFsh@prAdmAlsBayBwbCoX|mAhx@pkA"],"兵庫県":["ka|rEsmyxXgh@oiE|_CinDpr@p}@fs@ky@o[u`A|jAlNuhAqf@_h@srC~kCj{C}aG_rLo|A_GQqqAqhJfmB{eDteDkwEqKuXorAsyFkyApXf}AicBfjAcjAw_CtL{vCwx@w[}hAheDha@loCgp@jEnA|{CiyAtz@vG|hCulAz`B}`BkyAafG`]kdAxrCw}AarBza@agCq`Co`@_~@inCehIx{@wm@fkHyrA`Dhj@jlIes@vw@w{BufAue@lbBm@|eG~gArTh_@bhComAnzBqyDu~@_sCxgGgtAakAqaC`{@s\\jrHzqDfzFqhDhcA{_@jaH{bC|dAyvCpdNesHrOmbGkrA{QmiDjpCw`Eqs@irD{bBmbAbP}sBqzEgRajE~eBgvBsi@aUz{@kdAsnAwyDhr@rY`oGddCjkE|AjrEqiEpjA}oGvzJ_iE}zBchFzf@aGvxAniB~mAoqAvFe{Aj~Fn{@hoEivA~FpsAtf@y^xoHjrAfWcmArfBf|@nJa`@niAznAfeA}jBgPKht@vbDb`GetBh`Bfn@n|F{yBhlC``GdoOki@zxAx_Bdh@tb@jcKn~CwnFpsChBlRiwAnfHnx@tlAspB|sJsx@`bBayFfdHpu@baDgfGdkDjgAdsHgrA|wFj`Ilr@bqDaiAdjErwBx}BniD}Az~@kwDrhEjDf^nsGn|IniBnn@lbElxFxLph@b~Ed}BpgBfhAgGjs@i`CptAbbBhyByf@nvCdpCzq@}cCpgDc{Bh|BbhEljEj{@jyCobAgLurCxfDixDtaC|F|jAouBp}D~fCxeBku@{hBcoBgK}uCe`Ad^f|CidDgQgsD_sBk}BasBxFwKyiCpyAb[}`AosAycB`o@_qDkt@lpCojA~|DtQmwBg~CxqA{]oeCkiCnyCclGaeCg}E~gAce@k`@yiBkaAte@dAgeCxbAtiAv_@_uAsbCk|@tmB~`@}vAurAjwAiZgn@_lBzp@an@in@im@|v@{~Gfr@wzBtjAlPhkBkdIfnAbh@xjAcnBwqAefCx~MceWiAobHdtBakFg|CuwW_xAzc@_Ri}@eUx{@uB_dAsyAcHzi@gkAehBmfBzLixBki@n_AkWuvJat@xf@sh@yfC","watrEqspxX{TchEcbAbkAmYm|@`Tt_Fj}Age@","uyqrEyrexXtfBm~AsCumDe`Aze@nSbbAwl@{r@sKx~Age@ibAtCdwAc~@{LtcBdpB","uyqrEouatXdc@{uB_rB}BjMboBwz@_l@pv@hgDrcAsoB","uyqrEcxhtXb_Be_AcbAknB_|A~hB~~@pdA","knmrE_p|sX}}Ctj@_Hbu@roArN{c@voBnoCqEyu@{bBzL_}@vh@`_@cTyxA","ymtpEyokuX`nCtcAvs@~qCw}@ftBllFpmEdfFgfCt_BpiB{n@anCrj@cvBmsAsbCxrA\\pwBfhCj`Bc`EbmBjCucAkwL_aE}}G{|EaqSe~D~n@oxAtnCqjDtm@mxAtzBujKqHmnQmvPk~FuqAkiCu|CutEn}Bf_A`lD|nHhbG~{Cn|IvfJ|lGcPhjBlzUrgN"],"奈良県":["_{_sEwil}XhN~lA~xDzwAaHd|Aav@l[bGvoCifDrrAye@rnBnbAbjAyPhkBikBdFllH`uEtTd`GweClgQawHtcD}O~xBv`DcC``AdsAr}B}k@pgCj`E`uCcb@`tLrqDff@i_DxgBmd@h|FjcE~sBeeD|mMy}@dpDxlCdlCkjAdkBr|CxzRefCzbAiq@yn@{gAhnAksC~gFivAj|B|jC}dBrlFxv@`cDjfBvy@hbB_p@tzAndCb~@gGjiA|qEl{Dry@fcBzcEpoCpm@pwBa}Fx`DyvBbtBxd@fZwxDpsC}~AfwExImSb|B|~Fzh@x[~~@j_A_nCz`Dt]g]uzDe`CymAme@{yCtAaqFbpB}eEmaAw}GqaAki@njAyhGhmBkMxlBezBczBuz@cy@~kCarEeb@taBeoDsuAp@rHc_B{jDrfBkjEaxDdPsvBgbB_nGeyG{yEv]sjAav@ihAvtAi|JqcCnkA}wEwEnBk}CutAxdB}lChQ_fGk~A_wClc@y_@bdB{tC__DmtApt@ctCkiCutH|eF_{AiwEg{BthDekFxnAs~Bx~B__GgfDcsAupTyuGarCcq@l}AueDgKxo@trH_kBoUgjCz_BsFziBz|AftCw`ApW_QdiD{aC|pEy}B~RqpEygDelBpu@o|@b}C~y@_{CunC}fCemCzdAik@jeCy|@ilBgtCl`B"],"和歌山県":["gykpEgyfxXx|BdTduAz|Hqy@tl@reA|xAC`eCorCttAo|Agc@znArkEzaCqVbuA~kAhOunDdwBqpEbxAi_@wr@bmDv~@ssFjf@pd@a@g}@xuBoh@{CloArmAcOrCqwC`oAurA}iAsMhoDwOzAu_Ah|@|u@eE_}Cx`BvpFwQrvGlhD{jBez@vtD`kCdUloC`hElw@geJpeF}}ErbAfwEngAcbAldBpmFaYzbBnvA~`@|Mp~Btq@woBloAvb@qbAsgCv|@smA|{Cf_H~gCo|Ah]vvCh{ChGksAcrInt@qzDdwKasGzaAslCq`@ur@|dBwtBzbBlFsCc`FnrBo`Dq\\ymBpfDspApAyqDhwAvVoKabC|{A{uA{b@_kAthB~RdxAfoClg@{]|RfkBu_B`ZWt}BdrAat@dgA~zAniDu`KhsIsFj}Ck_IhxAwNZezGhd@f\\|aC}`Eb[s`IbwA}wBqc@k{FjdCu~Gia@wdDp~Aaj@ko@wY|r@iwA{m@kfAvq@l@kn@obCnjA_j@oe@ot@~|AaJboA`bDppA_OlL{gAwhAsf@zw@udBmiCy{@o|@zzAktDcdB}sBs~IyaByiBv\\{g@q{DkxGpLpiE{vBifE_e@gdFipAkHt`@fpAixAj@t_AlpAqfAju@e|CunCnhAgQcuAuCg|@fbB{pAasHykBvxAy{HqyFisAv`ErtA~\\{v@n{Ds}Crp@q{@faEynEtyAabBxuEurNt~@o_AftFpaAji@laAv}GcpB|eEwC~aFng@|hDd`CxmAz^hkDobDiNy[~fCi_I{aBlSc|BgwEyIqsC|~AgZvxDctByd@y`DxvBelB|}FmlC}g@wqBkjE}jEmjA{y@caEwzDsnCycBb`A_yA_tAyZaxD~}Ac{Dk|B}jC_hFhvAinAjsCxn@zgA{bAhq@yzRdfCvk@pmMnwFvyL{dDraCz_B|yBkGb|DjpBvlFw\\pdJdsBd|@tQfdDlyAbdAosBv_AjiBrfJ{l@`iB","q|}mEwej|XqmAv|AphDjk@rbBeuC|jBbp@u_AqVvL}uBokAaX{fAjt@fhAhAwTtr@wuCbV","wpqnEqeb}XltChtDrm@`gIvpDroD`zCo`@ps@_oEir@~}AieBqkAfqAynF}pFs{@~dAueCasAqwAs_E~mBm|@gq@","{ggkEsdz{Xt[qyCbkAeq@}k@`MwdBqpEwv@r_Ir`BrnA"],"鳥取県":["u{nwEgvosXwdEfUulArpBofHox@mRhwAqsCiBo~CvnF`mAzTzC~sBwn@fL~eBr_ApRjbGnx@uQ`cC|iDvcBlaOr~@iw@om@~oBjfCrd[{vBb}CvpAl_AqDfkFp_BbyE~y@zf[oe@r_Uw|CrcNdI`lCx{EznVb{EbmCxg@lkCkxClhTybFldGqvAaYtBhz@ayCs~Cb_@z}HxpBnlCxoHawCjsHuyOfoCmoAx~B|p@tpA{bAtzCjpDzqDhT|jBexA`eAfm@htCocA|q@f|I|aGf}Rv|AqA`FqmDzkEcwAf{DtaHvuLvjAtHeiQcz@eNwHwiBndCgyB{qAofCe_E}Njr@}gEypAknAdc@agBk~B_cJqrJhaBwXuxBzrA}fEegCayJv~@{oB_zGp_CqmAahAbX_mBu|@s_D{fLsdBq}DsyBnt@yhIvkBiuDgr@gtBbn@kjHdgD{uIjyFgqBvVavAmqCsrEw~BdTwwAufKmoDov@k~AmwNj~Ez~A`f@is@pdA{dKus@ckDviC{oBxZkqCxbC{eAtwBvqAtaAwfDdcE~dAxfDuxBie@ilB{rAuWaFilDg|BotF|sAwlBs[ybGu{HsrLlnC}{Gmr@cqD}wFk`IesHfrAiaDiiAivCh|F}xHui@abB`yFenDjb@"],"島根県":["_stwEchalXesDp_BgkBc~BgfCucT_bA|pJbv@hnAgGx}Dcm@o}@}Q~jBpyAle@eDxbBakA~ZlmB_IyD`bDqt@f[|eAr_@AnpAufB~qAgZk|@v^h}AcnDbyDpPxbAljCkqAnHzuH|vAwjAf|@jjAqIvtBjgBlIkZtpJdjD_UtPfyS`|AjrHvyAx~AbrAveMdtAybEnx@|`@ne@xtGm_AnuCddAmIuk@|bAjj@buEtz@tAsThjAhdBte@znBaqH`fCoRfhIjzAjoF~dEnsD`xOpuJr|P~q@`kE``EhuAfsAdiCt{Akk@j|DjgIpx@{s@a^jpA~tFbeCfpCzpMruL~tPjeAvnEbmBre@fkB`pEzlA{^tHdyAbjAmk@bStpArbBnCow@paCd`BpzAcAvzAno@mu@xhAjl@vxBztBpfA`wElqC`p@`kAx}Bqp@dThzAzt@_IrjBptBry@zHfpCvpAs{@h`Er|Cp~E|cS|P~~Fos@vxAfxJgYnl@mrC`dF_x@~gAjyC|fEmWbtDhqFz{CyxAhK{gBvcGpI|h@o{FohAulB|XgoFdbFnw@fuBfdC`kHcwAp}DmjGou@utAzNefHksBcf@`r@wkAeuBmvBfzDweG}mEopAw{DquFkiGlrCouAkn@o{@itBuzCgv@a`@}nGwxCfv@ew@ppCgjDy|Amv@ajEc|G{bGalA}X}gBbrA}yLu{GeaBhcEkx@q@o|F{~LaFm|Bs}ByO}tAmmBonCLdo@u{Et_BeLnj@}mBm{Ca}BbgA}`BgbAq_GrdCmgCqbGsxFxtBqkB~d@w~Hgp@uqAtv@_zBqkHmaNhcAibHwwBuuBft@inBej@siAwbE|w@srCrdLymD{dGenBgx@`Os{EukAivDqfBt[ok@irCwv@|_@ejAswCy}Eu`D}g@aoCm~Aps@uxFuwG{IouCnnByjAfbAo_Go`DczFrmEahGejBiiK|{@yuGyoKmn@g{DuaH{kEbwAaFpmDw|ApA}aGg}R}q@g|IitCncAaeAgm@}jBdxA{qDiTuzCkpDupAzbAinCwj@w_CfiAksHtyOs{Bnv@","yof{EydekXzvAo}@rtEtfAsmByxBhPkcBmi@ho@ip@kjAin@tdAlq@}zBg|AvE|Ya~E_gAlcBn]pdB_`CihBwoBdoCbe@dhCvlBiAsmBfq@bhAbKvGfiBzmBw`@","yof{EcfnjXhrBje@pdDcaImxHprBnXsuAucCurAj}DyEpxAqqF}iC}aAebDxbBoZevDwxCohCwZnqCzbBzrAgcAv~FfuDhl@nBviC{x@nRlrE~xD","_gvzE{nbkX~\\gv@{`Bor@ebC`~GSpgDnqDwf@nQ}|DenAm[zpAwyA","uxv{EubhlXkQ}vDqrBaKhjBen@gv@iS|{@yyH{hDv`@qFfwDyWsrDkjCs~@vlAyi@`eBdlAa|@}yDgzGoRokB{pAebAjoCknB_FwIxsBehAjHdHrvB_uBtTnt@jjAwx@yDt@xoAs`CnpBlbCd_Bog@pbB~e@zlCz~@wk@fk@fgC~_A`ByE`uAxhAbY?uvCnMdfBfj@q]qn@`xCbxAop@`nCn`Ada@__BfpErz@vKexCneCyeB{I}`CbdClxAhF}xAqs@nD|y@i["],"岡山県":["smgrEw`zpXp_@u`H|aA_`@kcAs_BhmAn{@hfA_j@aXguJqpDehDjRerCukB{fB@~qAweChT|KqoBuo@c|@ua@th@mrAqoDum@ve@ocBmdEiuAl{@l`@~wEki@yqAnEnfBkgA}l@ctAhjCzx@gbHrfAlWzZatB_dCypIfzAsrCyeBju@q}D_gC}jAnuBuaC}FyfDhxDfLtrCkyCnbAmjEk{@i|BchEqgDb{B{q@|cCovCepCiyBxf@qtAcbBg{A`oCq~CanBqh@c~EmxFyLon@mbEo|IoiBg^osGyyElBum@pnDg|AxQ{bFufC}i@zt@pi@l{BdhAvFnkEhcIr[xbG}sAvlBf|BntF`FhlDzrAtWhe@hlByfDtxBecE_eAuaAvfDuwBwqAybCzeAyZjqCwiCzoBts@bkDqdAzdKaf@hs@k~E{~Aj~AlwNloDnv@vwAtfKv~BeTlqCrrEwV`vAkyFfqBegDzuIcn@jjHfr@ftBwkBhuDot@xhIp}DryBzfLrdBt|@r_DcX~lBpmA`hA~yGq_Cw~@zoBdgC`yJ{rA|fEvXtxBprJiaBj~B~bJec@`gBxpAjnAkr@|gEd_E|NtrBhtCx_HutI~nCbLzhD~iCnuBekAfbGvwA`{Jg~F|cDoeGvhIndBru@it@lsA|jArlIazChq@c~BvwIhsB`xJ{}Jx{Ri_AifAknDvk@yc@d}AziBfPqbByoAynFikBbBqkGbzF`iI}mIyeAiyJa|@bkAst@{`@knAkjIufBkfAdKiqB`dAxh@v@wuAqmAgh@mT`jAyNaw@zNsmBtyGbGpp@aaFg`CzQcrAvpB``@mcBydDo\\t`JyqBuVat@deF}{Bda@e_FucEnrAwpA{iDnpB}uGn_@kmIw^ov@{yCn`@suA{eDwlDn`@{q@mjDjwBmcB}oErJ_g@_`EitBxDog@wcBejC|bC`[heIrbAhxAm}@tfAk{BeiH","a_{pEam|mXduBifGe}@_FiSl|AmbBqoAyd@`oApdBjpD","s}zrEwqprXdl@imAkw@{nB|kAoeAay@ex@~v@kbBkd@}`@uuAttAzv@f`AodB|aD~hBhhC"],"広島県":["wqtpEgpigXnkAcqAk`AS}Bo}BylA{k@jbAa`@yfAeuEpb@wp@vh@xcBhv@wo@u\\`zBvlA|]dLwpAlnBpaA|tEoyCr{C|ZhI}~A`uAeI{e@sq@lz@}tBlcBngD`oDopAwrBwpHkrBsKxrDuhHgi@gqB}~@dG~v@etCoiDekBaT}oJe}A}mAuTb{BolCsElXmuEywEscAcSm{EvuCymAy_AidDa{@v]ukAizBct@gkDjj@ogAwuAioCpbAmrKibBadKqrEiy@}D}{@ydBbiAvpAoiGetDyxSawCmq@hlAmiAeoBxPvu@{vBd_BkUl}BdzAaLn~Ar{@wO}hAmxEbsBkcAtI_hGb`BwhA_aBseFa~FiQ}g@icCiw@kD|rAgmC_kAqx@ebC~hEqcCeA|vBed@rnAq~DcrOyx@upIbbEky@nbDwgCnkAwwIisBiq@b~BslI`zCmsA}jAsu@ht@whIodB}cDneGa{Jf~FgbGwwAouBdkA{hD_jC_oCcLabMtxLtDdrBbz@dNge@`mLty@hwBgwB~zBwGhaDdjBhiKsmE`hGn`DbzFgbAn_GonBxjAzInuCtxFtwGl~Aqs@|g@`oCx}Et`DdjArwCvv@}_@nk@hrCpfBu[tkAhvDaOr{EdnBfx@xmDzdGrrCsdLvbE}w@dj@riAgt@hnBvwBtuBicAhbHpkHlaNuv@~yBfp@tqA_e@v~HytBpkBpbGrxFsdClgCfbAp_GcgA|`Bl{C`}Boj@|mBu_BdLeo@t{EnnCM|tAlmBr}BxO`Fl|Bn|Fz~Ljx@p@daBicE|yLt{G|gBcrA`lA|Xb|GzbGjl@fbEhtDrdBdw@qpCpoHycCniDrjAfpDuv@ndE~p@{Hs_BzxD_iCq[e|Bp_FdT~hAmcBfnHk\\xQ}cDlq@AgTsoElvCzy@oe@qzH}eB|h@cb@|pBwgCez@}mDknHe}F_{FqbBkEyLilD}VdaAyXexB_TxcBsVgh@qVglBfoAo@ynByvEvkA{hF","}_ooEk|liXsyA{mBqsAhoAn_B~aBtmAmcA","udpoEkeeiX~j@hi@akBizDkgB~p@qbAheH~r@ftCrrAdDjcBw`J","obmoE_itiXaoCylHajCtpB|rCd`HbmBdC`XghB","c`_oEmy_hXcbF}uB~w@i~Amp@yk@zG`|@e~Axg@p|BteF}dGosBhj@lp@_v@lHr[r_Bw`AddAwvBs{CnXchA}kDrcEb~DddEz}E{y@|wB~rHj~Bdp@hiA_zAwt@kaF{oAg`@vnAaz@ylAiyBhyCaoB","wrqoEijrhXiEc~DcnAmr@}_Bbq@dw@fiCd}Bdu@","ivppE{akkXbt@t^tn@y}A}tAc{A{qDjw@pMfeAltCr[","srapE}tgkXgcEclK}iDv_@ng@xaJl}FzgBfgAi~A","ivppEyvqkX|tE{gCzoCy~F}aC{rAsQxhB{vAilBawCd{A_U|mBmbB~]oFb~Br~CxuB","qewpEatykXxu@slFejHexCkR``DpbBbsFdcDkM","onjpEapfkXgiAo`Ac_CjcAnvBhxAzqAe{A","iqupEsnplXhaBm`AenAcmEgzAmn@x{@lkBulAn~@~wA`rC","om`pEenhfXndBe`@kGejAojFoyI{|Bss@olBf`Bx}AvrAvo@|vDdiFpmC","udpoE{e_gXrgBo[qCg}CisBtE}q@vhDdbAhI","udpoEmhkgXpgFvaBs`AeeBnk@lEoz@yvGo{FzoB{bCgqB{rKcs@clDhtB`eA}BkZjoFx}@jo@fnAogAzvBd_Acy@s_CtvBabC~sDnOcdCx`Bv_@dwBcoEhzB}@hiH`hBweBb{AvX|mDwyEx{Cyz@keC{m@`rAwmB`~Aft@","ovwoE}a_jXyu@y~GyaCze@qgG}kDmk@jv@laFjlEwtAloAfsAtc@dl@vnGhqDokAdm@gvC"],"山口県":["ej_nEqu}}WpM_hCogFni@`m@vgCwt@fdAvj@bs@tg@kpB~kBub@}Qo`Abr@|q@","ifwnEud~~Wzd@kjEx`GsrEghAm@_@kdBbxAk]ql@cvArlCns@xBwqA|nBzfBrtC}`C_qAggEswArB`{@ewAo|AiV~jBpIgl@wk@bkBxnB{EcbBatA{o@`cAmp@bsAxxAi]cqC~oAzcAwgHysTs}Aho@cfDk{DwsAs_@u]jmAu_@{`BwvBnGjv@evB~cBr{@fc@ybCn|Er{B{~De~C|v@qaAjlB|n@vg@cfBwnAmv@jm@{gAwjBfYeh@emCaaBjwAg_Auy@|yAipEzyB_FiXirAx}@ekBk_GcqJzkB{bA__DexCxv@siAm^_xDggAiMjo@axB}tAahAq_A}nGz{CvbBeQaaCg~@oa@kA}nElaA{W~aCdzBgaBwcCzuAy|ChaIhzIzu@{kGqnA_Kud@djCo`@qsCeqB_rAn\\{kDjkBsa@rvBmqHrhBi{@_w@wd@x|A}h@dAqxCbnDmWxGecAqlAuZtnD{wGevB{`ExjAjeAfSguDbaBqr@pxAujFdmGtSjAgpCuoAmlBy|AcD_uChoDqpLteArd@uc@a~@{RcYgbJs}F_oDabHeo@qaAxcAm|Jby@q{@yuH_wHxQgw@tcByfCm{Ane@pzHmvC{y@fTroEmq@@yQ|cDgnHj\\_iAlcBq_FeTp[d|B{xD~hCzHr_BodE_q@gpDtv@oiDsjAk}C`hBrg@lsFtzCfv@n{@htBnuAjn@jiGmrCv{DpuFlxEz~AwdEjwFduBlvBar@vkAjsBbf@{NdfHjt@jOu_ExsIygH`sAguBgdCebFow@}XfoFnhAtlB}h@n{FwcGqIiKzgB{{CxxActDiqF}fElW_hAkyCadF~w@ol@lrCgxJfY|`@|mCdcAkk@xkAhqDjgA_UwrCd~A~Nb`EruD`vAyGooAjdAkAeOhrC~_A`kCx{EfMjhBraBzx@hkCxzBbmA{ZrgFloAdfAplBp_@~f@meBjaBr\\xOxcC`h@ci@njDd}Dei@nlCzvAefDfv@phAp_@uj@hgBltImk@lvCv~CbkAx{@vsB{k@jwEnt@hsCofAbjCliChaAseDtiBphB`_Azr@fbEmtBdxB_fD~`@`s@t|Bk}A`iFjtAxmDMbdDe_EpkHjwHvcFzOo{B}tBySxs@_eC_`@idFlpE_wBmPzyEviCx{Kv`Ank@gfC`fDrsBpeAzgDqp@`wDb_EjmHmuI`wCv`@lUwsAhkCiVlwDvnBpf@dxBn~AmTfEvjEpdDbf@`xGgjDu_@yl@lhAmfBjrE~s@~`@gnAfxKb`A~J_wAzqA`^~BorAew@lVoiGacMu}Cuc@hc@qv@q`Auz@gg@hu@w}DwvCx{AgbArSc}B","ucesEi~j_Xlm@yYeTiuBwfB_l@{@hbBmgA{Dau@bpBzmEmO","_sonEkf_bXx{@pv@tSu_AakD_{Euz@rmBfuCnuB","}xinEwy{cX{zBthBjyBrvAtqB_[qW~}ApeAtnAckAjV|hBjeAze@}{D{bFysF","e_aqEawr_Xn{@oGzw@}xD{uDy|Bd_AsAyt@ijClu@uqAyaAwEabA`w@lmAzyEs`@bwHvxAmb@","cncmEoaefXz^qt@kmAe_BzI`yA}`FfoFniAtpHnw@}Kau@_yCreCugB~p@suE","eevnEolccXiPtvB~tAjLsAkhBe~CqwExAflBhyArnA","_sonEcozbXf~BuxAuQkwAymBdhCctEvFddD|[CxsAhq@soA","ej_nEyxveXziCjCpaBwmDnfC_VukBwiArUueJoxBpr@qiAmyBxeAmEkc@gaA`lAu_F`fDtu@sjAw}Blw@_sAsGedAg`Flz@}bB_qAqVyoCrp@w{@k{FuiKzq@`jD_z@hc@oGfiCfyCj~A]zcE`dCbaBnc@`nCw\\hyAqbByRrJnsBy{Ej_B|h@pkC_uBryDds@vk@mg@`dA`zAd[wJxfDdbFtj@","utcmEuijdXfg@}{A}dA}vD_rBnaDtoCjqB","ox~lEefpeX|vBaJffAzqBpg@gj@yyAuxBcbFjFduAvt@","iaomEwnceXbzEhtCjU|bD~l@ol@aF}gCmfFo~D__@a|D_mDtdH~{C}j@"],"徳島県":["wicoEmoqtXmkB|P_}@_tBodB~j@i}Em_DidCryIwoFdArb@jwB~fA}`@iRt_L|hBhrEvDjdErnFrf@zlA`sBooDptJtoAzeAg]zxDjt@nhBk`Aj`@sZxfErp@xjPpaCltE``CiLp~AbiBuMhjGd~@xpBwj@t|@zlEr|CoI|aBlwAbfBoAnaC_|BfqDojCr_@l~AjaFyq@~~@jQhtEjkAr~E~`Cx_@yh@hwFhxE`qHtgC|n@`|@`dGfsDzZ`wFglB`mBphB`~@w{At}DvqDl_BeEn_CuqFJscF~oA_}@os@itPrrFmqEl{As{FclAywEg`E}kAge@q}CpyBgkAel@w|EnvB_BpoDazCbbI__AjnFj_Ak]giLvfAalH~eDjRdu@goAvgCfyEn_Baj@v[{zBh~@r`@vr@kwAbhDys@}c@s~C|zA}lEer@yzDh_BaiE_aElOeSm`Iq[x}Dma@{gEkjA\\waCe|C__@ngDenDqoEsp@abH_zEyrLsbCw`E}fBkAs]{kAtx@s|@isFkcB~k@g_CsjCeoBha@aaCir@uFyuGw_Tyq@rp@rbAbmC`DvuFazA{{Fsx@hoDjeAdrHqjCeLns@`dBg_B_q@yT{tCch@vl@_UmiCdf@bFe`HyaEc`Dh{@orA~`E_jG|_DoFvpA`bBkq@bHbjC~v@lZ_wAci@oeAlaDg|@}kAevEn|AwnHigC","m{|oEg}ttXpu@~gA`nA_q@bR~pEvgCk|EkmI}`Czk@huB","om`pEcwptXroBj`BfoBmRmqC{jD_mAlVMneA"],"香川県":["cfmoEkhuqXouCm`Fsp@yjPrZyfEj`Ak`@kt@ohBf]{xD{oAib@toDcxK{lAasBsnFsf@ygB`hEwdAsTaKlyAguC`uBtiAz{@yNj|CobDbhF|RjnBe|A`jBd`@pmAaaCjjAcrAwvB_mBcAs|AfaBbyAdeBwfEhkC`dC_BxWvxBwo@px@hvBuc@`c@byCwlBhbAsmFk~@cnB|iD`RfcBbeAet@d|@llA~gB}X}{CtoDflEnh@w}@raAx~@l_@mrAf`@~iBbb@mfA|zIdp@nP{bChjCpx@|gA}xAhl@fKp`CktAlr@`mAdnAya@prC|lDgEdgDftDcVryEcyAqeDc{A~W|qBjyCwrBsgA`t@ffC|bEcp@|bA`uExbBuAegBv~@f\\faAhd@ydAvp@n_@g`AlnAl_By[`_@`xDz~@yRsj@nkAxjByYluFd`K_{CrE`uAxaC{MztDe}CnzEmBn~DbTekBl}ApEhz@ciEvxF{iGllL~x@nc@|dAjaDwaAblEpm@blB`iEvgBu|F{Ha{Ct|Ao}Aa|@adGugC}n@ixEaqHxh@iwF_aCy_@odAkfEgXqlFxq@__Am~AkaFnjCs_@~{BgqDnAoaCmwAcfBnI}aB{lEs|Cvj@u|@e~@ypBtMijGq~AciBclBhX","ugupE}s~nXzSmjBoiBifCg|D~oBvmClhCbcCuF","g{wpE{okoXukBseFup@pWsb@poAxcAfdB{t@tu@`rDm]","_hqqEm~jqX`aAfqFpeA~`@xmBa_HgeDk}BepAdiC","ykkqE_ovqXdn@qdCavBuvDqaAn~EliCv|A","}{mqEw{arX~w@egBck@oiA|wBgsAjnC|qBxM_yAjcAfrAt_Aes@u{@wqBunGgeBeiAmrDrY_lB`bB_QeFtiEhhBjU}vAsrF|{CopB_hTmvCwRjrBccBepCd_@frBkq@iPDthCnjBtrE}g@x_EjtCdaD`tA~iI{}@fiBbbC~lAhiC{pG","ujhqE_{zpX_kCdkBs@vhB|mDu`Anb@_zCa~@}fAwDtmA"],"愛媛県":["eqhnEmh}gX}xD_gD``@pwDzwCqO","ssnnEginhXXz~AddDfeEl_D_mCeuAkmAE{pDoiB|gAic@uvAm}CpRkz@ocAiUvo@zmC`vB","ej_nEa`yhXpcBpeDxLkzAfnD{Cma@ecCwzB|kBkr@{_CglC_|@d|@xmC","epimEcezhXvfBeYxBokAjQdt@poDua@tkAfdC`bId|D`sFr`K|wErwSnrLvxIryMtq[cBpuBppCcL{}AjuBph@ndBnyA`GkgAj{CjuApa@{WhcCj{BuDqrAvjBnl@zs@vtAweCjn@xZtWfhA_uAdsAppB|^wiBj{AvxMv~SgdHsvRxqB{U}CfsA|bAfIsEcgD_eAcsC_yAuAgnC{uDwyEscRikD}vBtlCkeBmcCax@oBimDkcA~dAqUmz@~lD}fCefBcjBhx@oeArs@dvAsQghEdbBzhAtYrsCgCqfEvkBnz@eW~dA`qAd_BzQquAd~A}PlqAjoBzkCye@{`CquEzlCpqAdV}wA|oAlw@kTzwBfy@~{AxvB~g@aDcmCbcBomDqfBs}@pcAm`Cw_A{jBnR{cCex@}HxsAme@aXyuCzx@ec@|hBvxGpvEvxAizBwwA`aBidDqlAklEdwAjN|n@pzBbtAekEdvAm]m\\roBbqAcZwMzmDdkCbyAmd@xlAnc@izB~dCoe@nM`tA_{@iT{[zjArpAcYzi@l}@q`@|z@mcBwa@rz@bgAcq@|oAwcDaAv}@lgAouA|bDzeBnbEnrAegAkgAsmB{w@l}A~Ce`DfwBmw@eo@sr@rbCcoB`QtfEp_B}BgIfq@nh@ymBf`AhMfg@}dAebAwIjn@cmCuj@aJfkAmyCjy@xU_Z~_Bh}@zpAwfApH|IriClQe_BjnCgrBzf@zgBjhAqg@fZlv@b`@agAorAub@liDka@iq@t[hz@t`Ew}@rHlmAnsAwoBrvCntA`kArlD{@lh@buBrz@slB{yAo_@`@q_AgrDrFbaAmxBy`@gw@fcBsrA{nAhOeGgcC`{@n@kt@{pApiFaGqo@q}@hsAidApqDuc@xcBieGuZr}Ju|A}mAoo@vn@hlBthDxuAwhE`dBpaAxIpdEdbBaiBd`Bl]vu@}uBqiBy{EwQ~vDsxAsqDuv@|aCkv@ym@|HcpChlAeXji@ygDumBl`Btp@ecDkt@{sC`qA~~AbhC_pAanAeaJu|AzLwn@{}Ds~Csm@qbKnoAafCxaCy{EwgAugBvd@ssCluEwjHnz@oa@kdBzfE_fDdhBcpEquGoeGovBoPk[}wEg{ElTcjEwyBc`Gu{SotDyJisB~fBee@rsCoyDla@sMfvB_xGlv@qr@drBkcAeG_yAamFnoAu{T{zAg{IwzGclCscBwbDkrEtlBiiEmmEquAllAmnDuo@qz@mbGk}DmVwvA{vC_dAv\\_bBudCitB`TsdB{yCciDg~@bdAcsGsdAs}BywD{~@qt@eaB~jBegGwyBc}D`}@e_Fq_B{pCnaAaoOuhIazHrxA_nE{mAg}Anr@ouDc|@_pEovEayDa~@v{AamBqhBawFflBecCwaAgjCb~BjFhaD_iArmA`a@xsAueAp{AjwErgF_Xd{@`jAsWsMlyAnxA_c@u^`n@r_ApBfhAnkCjPb`DgdClrN~fAjeI_sAnoB`kAxXmsAz_AvsAzyFgy@z^hpDrhBasB|PjUziAz}Bm`@p{@bvI~`AkMqiAdqCdzBhh@u~@`XjdAntEyyA|n@dhBbi@qeBs@wh@fgAdm@lwAkw@cIxWlj@yuDt{CihNbeE}oAnyCisHhpDxq@ly@iyEvjDlaDznBoJfiE|s@eyE`uBu^x]xjAvhCpPbZn_IroHpqKfjAhzE`}@sx@laNjyBfhA`yCgk@b{BbtDtjAhhAuzBwDniA`oAoW|K~wAnqA}[h\\bsA~nCyu@mSd~@ny@h@","om`pE_lvjXteDn\\d@jyE`cBpkAxwAkg@uhDanTumF~F{StpAcpEbqBq\\n{A`qAb}DzhB}Wvp@lyBeImfCtrAol@","udpoEmp~jXlgBa`@ip@pzAfcBfeAfeByp@dcBps@rIm~BwoL}yMbn@vlDmjCb{AmUhdE`jB`dB~fAk|A","igxoEg~okXkjAu{AcCjdEw_CjDxeAtqDk_@zwA`eBmNth@npApwBmiDsfAijB~rAwdAe[ofBumAhF","}s~oEyxqkX{`BogEuvCdvAr`Bd|B|vC{J","om`pEqz~kXxhAi\\gdA{qAgr@jaA{yByoDqtA|i@rhCnaEntByM"],"高知県":["ixqkE}_mnX_sBwuYljCerD~IshK~}C{|R|~GyeDx{DidM`bGqj@xnGmqKhkEom@uY{yBvdBysCdvFonCox\\cjEiiLunEujPspKer@|xCrq@~lGkzAvzB|c@r~CchDxs@wr@jwAi~@s`@w[zzBo_B`j@wgCgyEeu@foAkcDqTkiAfnHj]fiLwdCkkAwkL~jAqoD`zCovB~Adl@v|EqyBfkAfj@viDf{Dv_AblAxwEm{Ar{FsrFlqEns@htP_pA~|@yx@f`KumCpbBb|@~oEor@nuDzmAf}AgzAheEhjIvbIoaA`oOp_BzpCa}@d_FvyBb}D_kBdgGpt@daBxwDz~@rdAr}BcdAbsGbiDf~@rdBzyChtBaT~aBtdC~cAw\\vvAzvCj}DlVpz@lbGlnDto@puAmlAhiElmEjrEulBrcBvbDvzGblCzzAf{IooAt{T~xA`mFjcAdGpr@erB~wGmv@rMgvBnyDma@de@ssChsB_gBntDxJb`Gt{SbjEvyBf{EmTj[|wEnvBnPpuGneGehBbpE{fE~eDna@jdBvjHoz@hyCyyEpfFqa@fwA|hAbvBy}BxmKcsAfjDpq@zl@v_E|}AyRd[q}Dqu@c~@paAsUyq@ms@rxCiPpMacAzPdnBhsBghBnKhuAwmA_AzFhaAbkEbyFluAgjBbF~yA`p@i[jiAp{BtaAlVzn@k}AlEpfDlxAy`BrIx`AxzAwh@vg@hfAuTgaCa{As\\yUolG{t@vuA_b@wfDb~GudHqv@opAdwAe_Cea@iwCuhFa_Hr\\q|@d~BhNeuCc`AlI{nEhy@si@aq@wtBpeCem@mtAwdA~MchAvfBh_BjlAwqBnpBna@oZi_ClcA}rAgDeyB_lFdLi}C|}AkbD~yHo{Akn@_zDd_Aqr@cmBxTydDitBgcBo{LfeBkjLipCupBgoDnxAwbIanHqv@yxCykFshIkkDgiBcdC~Me}AnaBcFm^w_BwvDvpAcoAuxDisBbK}}@anB{wCbs@{n@afBqkCf[j\\jgBkhC~ZaoAihCwwAvsD_fBshEo`Dt[}oCmbF_`Bl[ltAgtA~r@zzA~q@uw@gYs}C`tAl@wGllAzdAih@}f@onAm|CzHusAucBeGq}Cty@}o@ow@fNaYeyAzu@}{AwvAui@xVq_Bwq@gMmYqeDglAoWwk@jwBlmAjw@glAzcB`{ChsAu_App@jsAnbAguA`rAzoBtV}x@rcBawAwkBkNqiFenA~q@iX}hDnz@hHbLiiAqvAohAxc@q{@otHw}UsUtfBesB~~@gwA_vAit@pt@dFmrBxkFlk@_rB{fF","on{fEup~gX~cAoVzq@`qAzwAy`B`wArm@wuAuyD_uCn`@a{@xpC"],"福岡県":["i{zmEom`~WjZblFmq@a_BeBvcDyk@klBobAflAx`AprC_nAccCxRxtBazAk[h}@ncErqGbnBk~AjUxpAt|BxXdvFgwAuJjz@yv@eyC_`KueA_JjHv`Am_A_lAgt@hdA_P`zDfeAxaDae@kkBa]ju@srAut@pr@naDhjAf\\sgAb}CpGnuDdpA~EjzAvxCdt@aa@vnBzpE`_@jnHosAzmBrJxoFruDvi@zz@xzDsc@vaA~hGjp@kFvzCfqDoSmWygAbgBkfAv_Gv}AzzAzuEpkGrzFt~Ah}IxbB_bFc~Bud@gjC}iKlxC{W|}@bwDfz@kdBl@vuAlvBxXxNehAtM~sA|rAiCmNhkBx~@et@pTjkAgeA`m@b}@p`CeQltFzfBn|AkFt_DekB|iCrVg|B_tA}Yok@jmGkkBbp@czAgqAssBtgDngDdcAdlArgGvmBg]~tA~oApi@p`Cqg@`|Bz`A}@lTp}BjoBe{@y~@khCzo@edBf|BpzBsvAoiGn~@u_@rxCppFzbBgHid@p~C`~@bx@nz@vcHppDlMe{@_aTbhA}{Ci~AelCraAy`Iox@_xClaHc{Nph@ofGt`BekBnbBxYm^{hDg`BkXumC{uEucAe_FzdAkxCtrQjE^~mDrjBft@a`@|xBj|A_z@nbAhc@~YxmDlpAolApy@nwBdrAkEsCtaAcrCrBqH`aAbnFlpA~W~nAa`AfjA~tAq@zd@t~BzrBgp@ldBpmFtoKedByDqlBlaCpCnmAw{CfoAj|@x}@o_D~fEkhAlqClLfpA~_B~t@ihAfp@flCgPujTgeAo{@{jFbvBy|EenL{hBnWubAg}Apa@ycOq}Gkk@ybBmrA|{BkrAkR{sF`{DunFz|@ggHhs@sTgRidEaaNktEawCp}HyrBkoCun@hoEk`CgNkh@}tFurAzbBozAgxAmxEpw@agBdhCavBidDgzAkGuK{lC_aLuw@}fAccEelD_bB{zBu{DotAofJhsA_|GoKy|R}xBhdA{aEavCykCjoBqeGqgAvd@xkCq{AblElk@}Pif@ngBlnA|@ub@jbC{aLflFDl}Aa_GtdDwwB_LlO~hActDmq@`U`_Co_Cw`A~p@f`Bq_AcEcXmlAm{@rQ|`@chCs{Alm@`~@pyGc{Bv{@mfCycFakBy\\zFtcBmtBaw@fkAeu@ibBwYa~@teBedBc_Dst@hnAelBo_CmoB}Ns}@feCxjAxmAyZzdD`}@ePjlJnxH","e}bnEyrf}W`z@y`Fwt@z]k^y}DgaAvnAlB`sCbSzaEvcA}c@","uonlEu_gzWp^uiCgjDdeBxz@vtAznAgp@","w`|mEci}zW`pAebCa_DgtBfEhtFvgAbB"],"佐賀県":["}|ikEuwbzWfv@biCsaAx`Ih~AdlCchA|{Czk@bjA_m@jaEvx@bjBaH`aIduBhXnV`vFcrAnxE{kCq[htAp`Au`A|jBkcE}eEqlBffAwp@npDwvAsCrx@vlAi_@vfDhxC|Yff@flAslBy^cmCvpDtgF__@_SbdBpgBolB_iAzrD|jFmhBf\\~tAld@g_DryAuGzx@vhCosEb~@uf@b}BprA`nAfsAmzAfZtxCfnE{xGvy@~^xs@_`E_t@qq@hqBsw@dzBjSpiAhfCrtCsLnC`eCjz@{vBprClaBtmAelCt]hhBqhCnoCkj@}i@s|BtrAm\\jnBduH||DrnHwyIjaEdn@leDa_AhpDqzLsq@axIv~GorAz`A`zDnjBnZthGo_M~nD_wAaB{vBblDktC|rB}iFflBscVya@giBotC`xAoXfuBo{JdeCwiCx{CabC`WtM~gAi}C`Rr[usCgtDahG}yCgaE{lDe~@nJyvAy`AtEh~IafGpf@kcLuoKddBmdBqmFgrCzZvVkiAqzBki@jgAg~@wOqeAw_GioBjlCm]h\\osAerAjEqy@owBmpAnlA_ZymDobAic@k|A~y@``@}xBsjBgt@_@_nDsfRjM}p@rcCtcAd_FtmCzuEf`BjXl^zhDobByYu`BdkBqh@nfGe_H~iO","am{kEox|vW~_@yoAcdBwr@uLl{Cnx@jd@hWg|@"],"長崎県":["a{dhEm|gwWckAelByvEdwCpEtqBkxA|lB|rBrjAtMgoAjlAjbDanDdc@ujEutDcdAblAftAdlCwkBw~@ufAdo@|b@rjAsqBjk@~b@hg@_iBbeDdoAcHzy@ljByAwfBzn@hqBbk@qrBrI|cBtdCfRlOtkAdfFo{AbgCjzE|iIel@dk@q]ssAgkAx_B{gAfpOuoFgJ_kB|eDguBi_Bau@tRwaEnsBvbA`oC_yExjBfXlEskBx{Aj}@h@u|C|uCraA}@}aDssD_}CxtHllCnKpyAdq@sXkb@lkBepAei@l}A`bBlDbyBxvAgiAsi@wjBjvDhSnbIxgFdeAz}CldAnJqcAxHlhAb`B~eAmW}tAcuCpfAanBgfAfHio@{xCc|DeoEq`CaHqZ_tE{fB}lCuuHgiBxVwtAoxAsN|b@kYw|C{nC_pBbk@jLaqMgdFwfKfm@}xFej@gfIngA}vAdyB|w@naA}sC~|CxGh{EhzEmJjeAbdBrnBgs@taBvzGsR|yB_sFdzD|A{t@moDoiAlv@~m@qdBuj@woDu~Aee@wf@}aCwzBUnGaaGmnCgjHuuBwz@q{AbkAgfEm_EqvCfd@{~Aa`A}wM`yFibDvpGhc@tlInjDnnH}}H`gGezDmpHqtDoFclDluZgqEtjEwe@bkDmaEhnBkcBhoGemBnkBojBoZ{`AazDw~GnrArq@`xIipDpzLmeD`_AkaEen@snHvyIufGeoB}~@iaBegDnL{IdvA~kBx`@qmAn_Dp_CnwFya@jpA{x@_Zpr@hwBg}@zs@mwCoeBgiAnoAnuEz|C{e@d_B`|@db@w|Ajq@nn@jcDcnAib@dI`dC~gHzAnm@zvA~{Bq|Cy}@}bCl^exA_Lr_BbpBfeCriCmT~_@zcAgsAsDrf@vh@pdAeUbcC`{BiXs`A|_ByKnkAbcBiB{nEry@e|@e`BivBhjBtvArUk}AglA}]|aDea@kv@elAgxC_FfjD{a@nVceAfxCf`Cqg@kqA|kAoqB{WqaAzeBuPjo@gmBf~AbuBy`@nkCx|Duz@crB}h@fTapF{s@tkAkJ}dAopEvhAkg@apB`v@smAltBfy@|xAq_A}jAkGd]o{@u~A_oA|u@ivF`}Ezd@zdDkxBb_A~u@th@urFra@dlBbkB_Na{BaiB|s@g_@oyAk}@yQa~BpqFcfJxzFcrBdmBjkC|fGwJvbCacDx}@`g@|]icC|iBbe@~kE}wF~PtrDqgAtEtNdkBugBrv@zc@f|AkkCneFfgAf^_uAzeAbkFphAkeBdfBtpDvZ_}Dn~DaE~lByz@|Xte@hk@ehC{`@xw@iu@_iAoj@gdBhRbl@~nByk@`_@gv@y|@}vC~}@upAe~A|}B~Vkb@kd@flBxLl^geAo|Dav@czAjgA","oc}iEoo~rW`Q_mC}vAiWc|@mcDqj@ncBo{Clf@`gEdpKndAwR_a@_u@n~AsgC","wigiEarmuWbm@ulDmqAuzAmn@dk@vrAd|E","qrxhEox|vWnoA}lBks@rQcPedBmwBxnC_|Bq_AlsCxL_d@sjDieC|i@utDyy@ar@fnA`h@v|Crn@_bBsCx`BhwAmOgo@ziBbdCi{@kJ`tCnvCytBrzA`k@`@iu@","{gmiEwpstWmiCuoJ{iLicLyjAwSkjBriDpDukEynAj{@afAoeEssBbqBu@g~DgpBqHes@}qCgiAjeByoAi|@akD~s@|w@|aF`tAyWoUy|Bt{@i{@tq@lcAmn@fdBh_DdCeMr_AuvB_s@}`@pdAt~CjfAfu@`dKhiCqb@laA~_AdlCmzA|EpoCn`A{NvLtyBpmAdR`fBih@xdAi}C}Jb_BzrAaV{tAlyCvmA~jBjxBtIplA}eDd`B`l@cl@rmEciB~vA~jAse@r~@fz@|pAo~C","eu}jEuy|tWx}Iz{Crz@kmB{]caCcvOxGn{@zuA`~AaK","{mhkE_~kuWb@srBus@fa@kd@k~A`gBm~CocDyxDua@nrBd{@mLxMjrAwyBb`@xfFlnH","eu}jEawvvWv{@ktCseDa_C`TgyDipA~vCgqBsJ_u@~vAr~AcQ`jBn~Bxo@_e@zqA|bD","w||jEyofwW`~@ypAj`FoIpZzcAxuAus@khB}m@lO_cBocBiwCit@bzBvk@dPq_Dha@gk@vgE","ivppEoaitWfi@tr@i|@j_BtmApl@kIasCtbCoxB}sD|jA","{}hpEwpstWww@ta@~{@lrBbjCms@arD}uEwXtxBl|@mC","udpoE_dlsWtfKbh@azA}gBdzAq|B{w@eaA`uDYelA}^zHk}@moB_EddA_{@s{AsjCg}@`q@i[{oDcuAjv@i@qaAyzBrGnQspA}xAbm@wz@iv@}RrtA_dAo^ve@y|@ouDqDlj@yk@u}@suBe|E`t@gwAwgAkJouCe}Bh_@fo@`sAin@FsAjkBdyBbH_cAjk@pkArSk}@zf@ebCieAz]bjAmjBlYvX~qAacAnvApiCkfClgDkP_pDngAvuAplCqvBG``CvsEipEa_@mk@zpC~c_@~aE","ivppEa}ntWd|AaLgAp}B|uBsjAos@ueAdmAxWudBusBmq@rk@dk@m_Bm_Dn~ApVu|DghA|d@^dtCasAwrD}`AboBkpB^fc@}~AkrDoj@tvAlaAfdA`|E{wDglDmeAfu@tr@j_@q|B_Tl~@ohBitCllBw[soBioCoaAmiGorIgn@be@qgAgqBmdAji@sFeaBiyFyj@ooAtx@d\\paBohA~]cPndBij@uY`iAizBgwBp}@pnByqAkLigBeiAnd@wiBc}BnXvz@mtAv}AnCa`Bm~Ao_BfIzqAkbBuu@`z@fsBavBkm@mj@zmBdj@re@_x@qCre@fz@qaAdAryAvsAcBpzBxoAiM`b@iiBmZpdDz{DxzCzr@oqAsk@bjCzs@dw@}fA`nAdiAnjBmgA|I`QbwArgJdsAvcDx~Bth@ez@}iAgfAnqBal@}C{yA|kBsFDquAp_@~wA{{@|w@lhCl^y~@nh@haJ~uEfaC_o@_bB}nCnuAel@{RhlA~_Cb\\cbAjx@bQlgApnAij@dKh`Avx@evA~RznAjuFu_@~k@xuCnhAxMmuA|l@`g@naBlfAgoAyg@{aErrB{fBydB`AlCaeAex@t_Cwt@ovAodBdj@fqA}n@}_AccBrqBlbAvpAin@wb@qd@xaAzjA~r@uLae@qz@t_A`KyzBg~@bd@oe@asB~a@ycAyoBjjBf[c`AsrBl~AvcA`{B_fBxJfyAfTkq@","ox~lEqtnvWxt@}y@zpAx`ApGouBp{AbP|o@smC{yEstB}QcdIsyBskAsfAn~Bbe@hlAcgA|k@{l@uvAri@opCgy@iPkoBxxHsYe_Ba}E}YoXdrGcpAh|Bne@du@xSks@|t@lkDf~Bzb@x{BemB`r@lmA_fBjwApg@riA`j@wkB?|eBjvBe_@bV{kCxgBip@gu@llG|i@mdAvjCu@ozByqBf{@s]","umefEgaapWwz@maAslBlp@z@unA_bB~c@phCxtB|_Ccy@","iwkgEicjqWxpIwDzyAycHagEajDszC|{@siCzqFjaDagBb}BjLaYntAmZ}s@_sDt}@rIf`D","iwkgE}u{qW~cA{RdIvvAvQynBk`AaP|nD}q@{gBgv@eaAv`AwUgwBi_Bpj@a`@_`Au~CngAsi@hjAbaAcv@hwChh@kbCz|BlbCiwAzaAbi@keEltAkl@~jDhaAmFdXjbBtu@ee@fEejA{bAv@x}DioE","y|zeEkzypW`y@s|BokBmcCcgBj\\yfAheDo|Ckr@_aAorF|yBmhB{^g`Lc~@k\\kpFbiHs{El~@u~CgkAcEbaCzfApXi`C}r@foAbkCqZbr@or@kfCswA|eCorCad@~iF|yGwCaaEfbAboCh`B_[ysEbqCj}Dl`B_lA{KbU|wA}~@gcArxBt}GmpDmb@oqBdmEx_@|t@jqBd_BduB}qAv`Cfn@b`CinB~AhaBtxB{Ehr@avDxb@t}AjaBap@wc@laCxlAq~Aiz@xcCxjAyaAuCtgAnyAln@xw@ij@sbAmzC`fD|fCsuCryBdf@buAsoAw}@yoAtcAxiEbpAbtC}sI}mBkmA~DyqLtuCigB","on{fE_bcrW`r@ypC{pAeJtZscBefCkRuwBd}AxnEhUdr@n_D","_|mhEm`wuWxl@cc@mjCqjD}k@njDpmAwHmYwv@luAtdB","e`|gEsoavWe{@q}AucA~Hgp@|tD`_ArS`qB_uB","oeshEgkdvWyfD_gAcRrrD|hFp_Ct_@gcCunA}fB","_ilhEy~xsWdeAj\\kdAs}BkcCoc@fo@xcAqz@pOhxCrxCmIghB","klriEiyprWkCqsAfpAcQujAkxAfv@wzCwiC`w@tGecBat@yJtp@vtDsfAxnCrsCdmA","g_liEgvbsW`Uio@}dDpGwk@_kA{cCv`C|b@~o@p|G_~@","arrgE_ijrWpn@_d@i\\kmAxq@vn@voAccBiwD|d@axAkfA}Dp|@cp@maAqgDnkB~Ut|AmoAfcAltDrx@nK{cCb_CuOooAzmAztA`d@cmCpxAbYp`AzaCavArf@vs@`Jy_B`dAt[mx@alC","e`|gEy{arWgr@f{@l`@|iBd}AgfEme@}i@_Yh|Ak[}pAmqAvXzaBzd@","iwkgEmssrWlcAb[z`@e}BctBs_@ehAjhAm}Agx@tMktEk}E~uBkvB{_BgfArkAkAwzCk}Efk@hwCmgBuk@miAfp@}q@iuBwy@m_BurEu}Cnp@k^sv@ej@xmBrv@bt@mN`fCpmBjqA`AzuEyqIgTgtCglCwbFcd@a}CfhBqyFyaAvjGdxBrmEgsApaEvjEzjEyoAd`@rnBacDrIjnB|bDz~FkGxa@k`CjMziAfsBdHobBzRhXd}ArcAzIe{A~xBny@vtAbaCsb@xMvgA|Qk}Auv@mk@piB}w@opAmlAntAo`@lmAdvAmMkuC`fBofBlv@r]abA|Vfm@zb@qw@ztAv`B_XtWoaBj_AdHul@`wAxeAug@mm@h{@nnHom@"],"熊本県":["ii|fEa_d|WbaG_EptApsFjuElzDb`Gj~ObwB{bBc~B{~MbOcuH{}BskJbwCw]gFjmFlcBqaB`iDptGdnFjjDu@dsBjlA~n@`rBobFsmAxaGdzAmsE~g@t~BrxAxLjt@ikCzbGa|@ljAniD~|I~jJxh@lPl]sbCdaApyCpiBjF~ApdB`wCgd@dUayB|hAnqAku@brAxpBkJmmA|n@tMp{@n}A{Idq@bjCzcA}m@hVrgAzfByaAeMxiEb_EfuDhoDa]oc@hmBbhBqM|yGyxFrl@c~Hub@qzBk~BgTlMekK_oAmIo`@i|FoaEux@}GqhBxbEawA|\\{sDf_BsRlsDysGnjAywVuiAgbBt^}_DueEkoGtjBaeDe[eeGecB_@}hF_iFfxBaaH~NsjFso@qnAuaGvs@a\\rdBe_EbqAul@zvCitAp_@{w@umA_xBhRb_@ujDqnHaoEoaEriFybHxf@iBbvC{}DjtCe`IxoAm}CiNsb@gdB{|Crn@kq@abCaoEuqAjb@a}IkqC}kAcbF|^kvE{nDnZscEg{Fa_@{gEivIk{CgfAggA|hAk{G}}D}g@_qKcsItaMq|LteA_kBemBgg@~eB_oA_B_hCpuC{aFbj@oyD`gGuwHzw@sfCplBghEjuG_m@v|JbjBveDwf@xjCzlG|zAxjI}{GfsAllAj`EYrwBzaCjCjbBa~CrzBegB|gJ{iCbeAo\\z{FajCpjD{|@fgHa{DtnFjMnaG}vBvdAxbBlrAp}Gjk@qa@xcOtbAf}AzhBoWx|EdnLzjFcvBfeAn{@|Ax}Pd~A}aB|bMkxAlb@yl@e|@kaA`lBkAeUwuApuCccHztDcGj|@euJrpApd@raF_`FfeBfgBphCms@","_~jeEk}yzW}fB`uAue@_k@dfAtuAi|AfS~uA~jDyo@z]rYdtB`sEneDh`EdfOrfFw|AjS{mCbuA{UnrAfuA_M{sB{nCkz@h{AwnH_aAkbEmvAw~@vuCde@pvBax@knAciAzj@suAgfAwkCccCuo@w~@vs@__@_qB}[zpAypEqtDuxJ_yC|dAbjEgf@x_A~lCtlD","ia|eEosf{Wse@rvA}vB_dBcdAdsAhhAxsA{PxeA`pAwa@ebA~xAfbDriBhdAy{CzdDtrAkHieHkiBr{@i{BopA","y|zeEwqh{WrpG~Gq~DuoCsfBttApT~p@","y|zeEmvl{Wpk@i_@c`BqjBm_Bd@lSp}EfxAavBhf@db@","upicEa~txWp~@yw@uwAsBc~Bn~B|lDb}@ygAcgAbr@ax@","mdseEetdyWt`Et`Mmx@|hAmwAqU~g@`}Cp|@sdC`qDisA~|AjkAc~@hWpyB{h@bbFj|DtlI|tAr`BbjBtaEsExpAm`A_`@gf@v`BdAe{@ekEdpAyV{dAqcAzuA_yD~Xt}@tvBa@mzAndBcmAea@`_@xeCfyCkS{`Dhf@fAdkAxlEnoEdvCjrA`DwwB_dA{nAvpAzbA{I{kBh}@}n@hiEbjC|x@e`AahAiv@~kAuM_e@mvBgzBuBpdBelAipAmjEs`E{PrCcdAb{AhDip@wfAksAmCeZ|hAcAcbBwvEifDdi@}eAeyAaeC}JxcD{xB}Pr_@ouAcjCcEt^ai@_z@moAxgC|x@ha@uuAotAoiCmgEof@qw@kyAedDra@f\\`bDimEymAoSwdAsuEt|BkuAogAysCrcBuwFcj@_zA~qC`j@xhJ","qqndE_fhzWhm@}tCzz@`sA{cByeEenA~sDzhAtrA","ibjdEy~mzWx_CwD_\\zu@lqA`aC_r@}qGocFmvDeD|pDleBfdB"],"大分県":["mc`jEiavaXyqKrgCu}DoQ_m@amDpjBglCzQwpGmvCqWiS{~G_x@{e@qcFb`CqK_eE~`@crAxp@hmAjSgzFyjJktCsLkxAcwEr`Am~FeaB}aH`~Ae~Bp_DqbEfbAaqD~mDfp@dsAofCpbBrl@zxBcmB`_Enc@piA~gAgKqhA|}Alz@zaBoh@bjCpgA{f@pEhrDh{Aq^r~A`yCbfDhaAi\\tm@nhDvlF|sCgj@sdAflI`s@jfFmdArgAlK~dHctBldDstAiL|dA|~CwpBpnGxaFpeBf{EidBvcCliC|xBidAnKx|RisA~{G~{@vzAhK|nF`gCnwEdlD~aB|fAbcE~`Ltw@tKzlCfzAjG`vBhdD`gBehClxEqw@nzAfxAtrA{bBjh@|tFj`CfNtn@ioExrBjoC`wCq}HrlLh`DbkBngCxnA}`HhsEixD`Cq`EttDqqCIs_CetCasCqoCpVogB_rAyjI|{GacGgrA|\\osCcjBweD~l@w|JdbHqiJjeJgqAnyDagGzaFcj@~gCquC~nA~A``@{bBdrB`jBp|LueAnqI{uLpLgdB|aD}mAaj@ysKqeBs_Bsv@moFtbFqgGz{Dfg@reByhJecCmrCnu@e|Mec@ggG_nJuxCym@kjE~fBe_Dop@g~Dp~@o}@{I{vCfuGjyAd_GuOc}@{pFmWloAkaByj@ey@xeA}cBmhAnaDmdBswFbh@|zB}nAks@wh@ro@w`Ac`Bm`@|fBwdAasC}mBjuAmw@uA}oAgkAjMwlDucFm_Av{ExtAklAfg@|{@qvAxrAt|BpHcmBz[zIlvAmf@qkAwvAhi@pq@ijAybCeqAj`@yz@woDyaEks@|yB~|@r{@qrEfu@|kBmhEkvB|Fo`AslBtx@ytB_uAw{@bk@w~DamA|f@ks@b~G|zACde@bcEecDgDvzBd`Cuj@x|@{jBiSxaAjl@}b@hp@bjAyLyqAzcB|m@js@}~BhdApM~hAwcCd|CatA{z@prAqNcl@yg@acAnk@ocBieCwcDsk@ld@e{HipAmjFw~BnkCieBog@ll@t~A`aCgMze@l|A}bAps@rOroCkdDbOda@tbAnqCgBbHtfB_dBlPll@|q@uu@heBdeAOyaBtnEgvE_cKsmAnbBbdApc@vJvkBuu@lXpiBxjD}jAbnAqBflEonCu{D}bArj@{}B}eAu{B{`FuSfs@cdCifBy~@~a@a_AobCmeCk}@fj@zhEvjA{Acj@fxAdzAfsOijA{l@jr@|b@om@zqBvjAi]_tF`eLr@beAxoA_YehAdv@tRjw@veBoGs{Av|@`kDpoLczBr}L","_ilhE_qedX`aAbxArp@w`@azAivDmCtuBusBmlBpQbwC|lAm`@","qkylEkqlbXja@kkEyuAg}Eiz@hrEvnBhvE"],"宮崎県":["garbE_zsaXelq@{pOy{EetCcQkwAmvAzh@g`IaiCazAgyGuYhxEmi@igDw}Bbl@buAfYrVzr@_mAoHbxAnnAuV~t@su@oxAwlE[oTchCn`AxE|U_sBglCgjEy`ArsB_gBgT~JnrApcAaGou@vt@zc@tr@}|H_]w|DssCyHyuDubAgpAwkFkpBfa@rbBg~@nj@iCocBanA|V`Dix@adBe_@|iAymAscBwR}u@{kCuyBwdArnAou@bBw`BqqD|Dd^u`BezAhn@{xAokDb}@zpFg`Poq@tTt_Cq~@n}@np@f~D_gBd_DzYjgD|aKt{Ddc@fgGou@d|MdcClrCseBxhJ{{Dgg@ubFpgGrv@loFpeBr_Bnt@beJwl@l~AgmChs@rj@htMj{G|}DfgA}hAj{CffAzgEhvIf{F`_@oZrcEjvEznDbbF}^jqC|kAaNdcKvzDpk@jq@`bCz|Csn@rb@fdBr~Mo`Az}DktChBcvCxbHyf@naEsiFpnH`oEc_@tjD~wBiRzw@tmAhtAq_@tl@{vCd_EcqA`\\sdBtaGws@ro@pnA_OrjFgxB`aH|hF~hFdcB^d[deGujB`eDteEjoGu^|_DtiAfbBgx@hrLre@rw@adAbj@peEtdEtxBeAj`AksEreEcyF|vKefCpdBa|Kp_HecEpKeiBvo@nxBdxDzf@nb@fqAhgDuJj_Awn@dGukE~rBywAvm@okJtdDreAxVwkFjxNox@xoEcrD_fDi{C~_EcpFg~@abHr{AqtCpxBzJt|CwuBfmCtcBpuFkfA`iB~zDx|FfaAn_A{hBcTgrDjnDajCsJozAhgC|j@dwCmrB{y@u~I~dCqs@do@mdB_bAc_B_aApeBkcB`@qxDsgFgpG`r@cqA}aDajBpSi\\xmA}bAzApf@edAsiAeTyzD~d@gb@cgB{lC_^tfAq|@ieF{q@klBc`FghCiGpIkgAqsE|wBsn@kpBw_A`nA_dCsYadL}rDq`EzuEiiFhJs`F_a@opEesD|{ClhEsuCgoBeeWksE"],"鹿児島県":["qbi`Em_e|Wy}FgeBgdC{kJvjBepFyc@gf@bdBaSt_@oxJrhGerD|}IdcFbmBcCtcDh`EnMjtHkg@{wAcSj~@e}Eof@}fDdsFdw@rdIvcEzyEppGikHyr@_cDlv@_fBsdAyeBjaCcv@f|G`bBzvCqf@fwAktEj_DwwClvPkfHpsDxpAztI~ClqFh_FzbEypAfrHnlCf|JdwPrr@{zCngLnmBwwAmp@v[oyAwcCeEkKioEokBxC}~AmtDnZabBsoEquH}e@}gK_nGkjPssAafBgzAjh@qNskCuaAz}@i~@cqBsoFeuAvDclHmtHwqKy~@pj@`xAnhGosBdi@yzBqcEewByV}bD`uPyoCnLq_Mo`Iwg@{aAh_Aiq@klAnF`KmkA}nBofAl_BawD_m@ed@nf@qdB}qFu_A{uAesDwhGp~@gmCucBu|CvuBsiBmQqjBb{Cf~@`bH_`EbpF~eDh{CyoEbrDkxNnx@yVvkFudDseAwm@nkJ_sBxwAeGtkEk_Avn@igDtJob@gqAexD{f@wo@oxBqKdiBq_HdcEqdB`|K}vKdfCseEbyFseAtvEagGsjB_yE|xKm`B`T}\\zsDg~DlkAjCdtBnaEtx@n`@h|F~nAlImMdkKj~BfTtb@pzBsl@b~HqmHvdGnkEjs@flDzkGqJt`DysBl_B|z@zZo{@jeF~pBv{GjiEj{@tl@okAatAuw@zbD{zAz{BfZlm@`vAt{AiVzAbtAvmCaRv@zw@sSypAhiAofB`hM{cCrfV`dJ|cCuqB~cCwBci@e`D|vCmbFjbBg}Afo@z_@fQqlBnbBwnAdbDcy@zZgoB`kLcwBvsOb~AbgN`lHhlDt}G_~@~lEu|BmAbuBnf@uxD|eD~gDdyCc`A~oAfa@jyAxv@wBgp@onAbaAktBbgEc{Cve@suCtoAgEqTs~@h`Aew@ntAv_@||@p|Dtu@ynBy^apCdfAo~@b`A~SbXflChoA}Puo@ajAnt@o`Bxl@p|A`h@kyA`g@r{AldAa@iy@u{CdnAwkFmnCwaApwBa}KsDsqSjnEq|G|yB{_Ax~Bfy@bzAopCm|AevCh_CkrEchCes@o{@eqGupAqd@ck@pv@vo@`k@yv@t@u{@ioDsvCxo@siCmfBe|@pzG}kFp{HunLxgDoN}zAy_A|q@b^pkA_mBbfAglIxsAJwwBahAqFuVr|BkdBsFb|@uhBamAo^gmAd}A~KghAkfGcyAzPqeAesDggAugCln@ezJ_aJa}Abr@","yo~yDo_g~WfgGiYpxI~`DteMl|IoJjkC|jJckB|iFzv@tdDa~AyaDouHsQkoGypKonAsyBvyBwb@i}@sfB|e@ehLscF_z@ouDizDiZokBwiCw|EuU_w@lw@o{Fe}Aum@etAsxLvi@{{AwhAc}IndDpoIfqIbtBsd@~`D|sBf{AkRC`xA`jInhFjeFsn@","oztzDy{q}WfjCv[fHyqCo{A}p@cnChp@bvAtuB","u{g`EipnvWdr@duB`pCsu@~qA}jCc~A{qB~{Agd@idAvJanCafDyjAxqA_tBorBqdBbb@wuAq~@dk@m|@i`@arAqnD_i@u~BysCunAfu@qt@ev@w[t~BrcCgn@p`A~tAdhB_D~}CbmN~z@m\\jwF`zC","imhaEk}rwW~cAdf@hKieBruBhNqrCslE|`@wbCwmGlIao@q|AzLloEfdBatAfx@hp@c~EboHsVraDx`CbuB|sByY`a@auA{kEew@ppA~EqMojCfl@lsCvaCa]aKaiB","ad~`EywiwWd_@qqAkyAd[mt@gzBq_Cx_@vyBfpDltBm_@","u}flDwlwtWptBevAjaA|v@cpBvjAnvBfcCyuAjjDhrBfnAl@xwAjzB|k@rNzxFf{Bd~DfH~rCdfEilFhAkbBewAoBtTooDvfAmHoRrfBn|Ax[gXrsBtiAfr@kkAxHup@bpBdQ|rAfoBrJonBd_En~AphBL`wDzqBqkBid@ulBltBco@l]w|Es~@u^t_D}wD{Mw}@qo@jz@kzB}f@zt@kp@{f@{zAraB|_Bwn@{iEfyFt`ExE{hAu_Bcs@`qHilAxwB{hFkz@as@bn@kj@w]o~@rsCmp@|PylAg_GluAyzB`hDeWynAz{Bg}HevFs[|e@_tAmfAsrAvUcdBcfBedApE{dBmdCzzBbe@bw@oxCnzFx\\{yEu|BcfBibEcGpp@svCsxBq`JuqBjr@iv@qjEcsKkbHoi@yrBrz@osEqlAae@_TsoC{`BytAlj@_OqpFaeAoyDbeDwyFz^|tDf{DfF|wAdrFsqDjlCbs@_uDfoBd|Gab@{eAjj@viBzi@aBvpBqtB_u@gvAxx@`lBfQ|Ch|A|eBtEtHdlAokKckE`MjhDjdBnjEp~@hJgvA`fBhfBvgCnyEtfA~aAcfAdFtzAnlBr_AmcEnl@hoAhgAsdAzhCtbEf`Ayy@l}BdZf`E","ice{D{`{wWfdCiyCs}Bk{EyvBraDdpB`sE","_tzzDuuazWll@idA}p@dJiBajFsxAak@_qAnoBt`BrcFvpA{B","ud|pDkqosWbdCg~Dw{D|GoBfyCbz@`[","kmxrDgt}uWhlAib@_YctCwgDxvBbsA~hBh`@kh@","iyauDg{pwWzhBu~Bul@_yGu}BhoCe}C~L_uArhDbKb}BzaBpbAtfE}nB","_kbvDyc|wWb~Era@vpAyeFabBsNc{FnlDhm@he@","ugatD{stvW~zAfyChvHqdCucD_vDk~Fqu@vOzwE","gmddEom~yW`kCh_F|eEwBcpAe_Bv|@mhAqx@bi@ypBepEeaBjJaq@vgB","uz_cEg`fyWnfDonFihEizAeaAni@x^cf@s_DmgEs_BhY~WlwBoqAhPqxBwjBmdEzdD~iB|}@k}AzbA`{D}OuvBrvCzH`wC|cAtIpT_fBlf@~tC~]gcAdm@hmBvdA_mBtxG{Qns@wqA","qnowD_ho{Wi@uvIg`CcrHypIynIgpLsuAieBj}AspB~dJmhFp|I}a@brGsgBzJl}AlWoPzuDfpCvMfkFljG~Wd~FreBrIfiIixAz_DciC`aEYvuDmxDpc@idJ","_c{xDom~yWk`BpzAqeAhzEvy@xx@klAz`AxJx{Awo@uJhEnsCjlEmkDs^ewC`{BpYjxBqqB}yAyxDdPovCayAuEee@l{A","otukDskmsWbnA{yA{@adDkjBdcB{^fjB~|@no@","s}~iDqzfsWg^{wB_zCwByRimAwwBhj@xuBtrC~nE|J","q~~iDoc{sW|{@ecAkrDei@|^lrAe|@jThx@n}A_uCbiCfhEhLbf@koF","y_ljDkshtW|aCq@qvAoaCgjEerA{z@xlAfr@zVoUpkAfpArW{cCjsBnxAp~@_nB~ZbmAloAclA`Xfv@`{@a~CstAr{BrxDy_BtRcj@owBa]vcBkJuwDehBx]r~@z`AwdBbUz|AlAdt@~|Auw@n`Ceo@ySpWh~@woBn{@gaAcgDbk@ax@cy@PzSfcCw}@zs@`rAzrEdkGo|BdZmsCflKlWcvEowElb@i}@xiD_F`zAcwBsmD{oAx[kmAy{@azAzrAfH","iz|kDydexWdeCloGjdC_h@sI{_AjnBgtAcxAkxE{lHijCmDmhBocEq`Bkp@dgC~pGduI","swfiDkjxqWx|@zqBdxCmUn|D~xAvs@knA|gE~MrtCwoBtiDtm@bnA|uBlhDa_Fh{EyyBm~@}aI}kFmoBwx@uaBukCnFmjDujB_wH|nLefFeRud@vaBeaAmzBg}BrSyBnpK","cxffDiywoWt`@ltBiz@z_DxhBxaAdwFqw@dyBuoDs`B{eHcnLynLccCwjFod@fjCtcEf`Jbr@`eJ","mz_dDcvtnWv~AggD}DkjEknD|VsdB~yBrRxyAxjBdp@qTxvAhpAcB"],"沖縄県":["woj`DmihkWw~BchDdzB}oN}vEuIx\\qcBq}AqqEocDn\\ydAqaJgkErzB{a@cr@dbAqRsXk_CtkBc|DcnEqxIavEtdD`\\_hDefEpRt[ooIunAqhGgjFurE{eG}~AqmEkpEqeQj_CfJjeBijExeDrf@lhB|{Cai@vvGldCtmH`mHr\\fbEhbDcVphBbyFbaCtjBnaC{vC|CpiAww@qEluC|pEbwAruLojC`cDfDqt@i`Fe|Aye@|uE_xAxtBxx@l_Hi_AteDzxC|`@rsCu}Bfi@f`BnqADruE{bBli@ejJjfAcgDvsAwTrnElvBg\\zr@h`AjxAgp@du@rlDleBwWdt@njBdrCi{@vnAlOxyAfx@M}ShsAbjCwIhvBrsEt`D~wAoo@tdDrhC|vEimBreA}DnpAhsFs[b~PioGrqDzuBhxCbhKrwAgj@iq@|cBtqBpJop@_lAtxA}[f_@vgChwAycAaeAzbCxuAt~@kMhfAn}D}GcbDix@ldDjEfJabB~~Bnr@{v@onAl|@sv@zi@ddCfwBu]qx@yB`Ik|AxcIdbApk@izBm_B_cHqtDguCmbBsvGqfE}mFyyCt}@tvBpmGk{A{@e}AflBAs_AkiK{gDmiAypBslDE}a@ukAl}@inB{}@`nBkUouBihBzy@sqAmxCb_FwaEppAypDi{EdfBuEcw@cMpnBy_DlqCotBui@}rGtmIeyAodB","irosCgyytVmE}fDa~BmhA|z@wnEqkAgmAikTcWkjC}yDyvB{G}mBkjC{~BzHsxCczDssEua@y`@zlD`pCvVb_Dd}Cz~BahA`sE|aBolAr~B~|B`vDdsGlf@lDjvL|iAfoAmrCwVwdBbaDxaFgDil@fdGxfChn@d~A}}A_gBgjBuIcnB~aCgtCdfDf[deCbhDhhEihI","ufuaD__glWl`@u|EatDf_Bxt@r|Cx|Ae_@","y}v_Dmr{kWbDgoBsuAwzAomAfd@`k@f|C|rBnH","otz_DwaalWsd@ieDonC~r@d|@~~A|vBhQ","o~`vCuao{Vn~Aub@~aBahEszAwVxeCg_AalBeeKiGgeO`gAcbBcdGp_Fa`@~~D_eCn{Bi_A|aHivCrCedBjoCi{FjvA{VzqA_zDtbBd}@fEe_@vbAzvLauFmEzqBzoDqD|`BdoCt`GauDpJhtBgmBpXpuBbf@","igqvCuj{zVsv@z~Az}CvHbuA_|Das@{r@ihCffC","igqvCg_|zVl{DajGkx@izBkcEnu@enB`oEYv{BhpD`B","afabDodvjWlkAcvIgvAedDc}BtmC|IrsH~|B~w@","utu~CiughW|aC|AscAc`BotCl]qpCgaBgjC~eBbqGxqBz`Byv@","o}e_Dme`hWpuBlsDbmA_fDk}B{]b}@k`CweA~Cu|@xlC","y`gaD}wlgW~s@`FkJshEi{@yh@caB~eBxsBjdC","iqt|Csl{_Xf`AlXpn@}dA{LyiEczEedBuxApq@mStwFheFfp@","wfi}Cmqi`Xh~@wsDmpCuoAku@~_HngCqZ","_mxcDstzkWsvBqr@y{Cy_Hs|HstDre@ryCbqGntGt_D`vBrwBe\\","edhcDu{xkWbMwbDorD_PymA|vBlpB~}CvaCeaB","ifv_DoiudW|gDcdBhyAirE{fEbl@wiCy`CmxGteHvrCbrLhxBwb@fm@gyAgvBteB~wAmyArRuiEbw@gO","uupuCam}wVrsB`Gly@kyAfBw`Cu`BezB}mCrpBh}@r|E","irosCykrsVtd@a`GkzBx|@oo@dvB~]xcAlfAg_@`a@fiBiAwaA","irosCmsltVaPvcBpsC{Gut@a|BylAd`@","wwzrC_wysV|d@ecAk{@ubBqvBjF{EbjEzsCsi@","kyesCo|hrVzgDcoXcvCuAh_@wqC_`Dz`@wnCkiAxq@wiBgrHigAqHriByoB`fB_@~vBgwBrvArx@zdAqnAjuD|eB~_Bg}Bz^ecD|pD|BbqApwBmNjkDr|DrpAgaA~z@p}@|oAo`AjhA`v@lzDij@_aB|hC}|AdPtlAj}AgtBrl@zxEwc@qnB|rCviC}AfLr}C~{CcsB|]mqF_dCcXdeBmgD","}bxqCwnjrVfTehF{kBy{A{q@npE|w@tnCppAeZ","spdtC_mvmV~RyiA}|CmeEadAbaEbF`xHfkChrD`mAqkEmQuoE"]};
+const PREF_ADJ={"北海道":[],"青森県":["岩手県","秋田県"],"岩手県":["青森県","宮城県","秋田県"],"宮城県":["岩手県","秋田県","山形県","福島県"],"秋田県":["青森県","岩手県","宮城県","山形県"],"山形県":["宮城県","秋田県","福島県","新潟県"],"福島県":["宮城県","山形県","茨城県","栃木県","群馬県","新潟県"],"茨城県":["福島県","栃木県","群馬県","埼玉県","千葉県"],"栃木県":["福島県","茨城県","群馬県","埼玉県"],"群馬県":["福島県","茨城県","栃木県","埼玉県","新潟県","長野県"],"埼玉県":["茨城県","栃木県","群馬県","千葉県","東京都","山梨県","長野県"],"千葉県":["茨城県","埼玉県","東京都"],"東京都":["埼玉県","千葉県","神奈川県","山梨県"],"神奈川県":["東京都","山梨県","静岡県"],"新潟県":["山形県","福島県","群馬県","富山県","長野県"],"富山県":["新潟県","石川県","長野県","岐阜県"],"石川県":["富山県","福井県","岐阜県"],"福井県":["石川県","岐阜県","滋賀県","京都府"],"山梨県":["埼玉県","東京都","神奈川県","長野県","静岡県"],"長野県":["群馬県","埼玉県","新潟県","富山県","山梨県","岐阜県","静岡県","愛知県"],"岐阜県":["富山県","石川県","福井県","長野県","愛知県","三重県","滋賀県"],"静岡県":["神奈川県","山梨県","長野県","愛知県"],"愛知県":["長野県","岐阜県","静岡県","三重県"],"三重県":["岐阜県","愛知県","滋賀県","京都府","奈良県","和歌山県"],"滋賀県":["福井県","岐阜県","三重県","京都府"],"京都府":["福井県","三重県","滋賀県","大阪府","兵庫県","奈良県"],"大阪府":["京都府","兵庫県","奈良県","和歌山県"],"兵庫県":["京都府","大阪府","鳥取県","岡山県","徳島県"],"奈良県":["三重県","京都府","大阪府","和歌山県"],"和歌山県":["三重県","大阪府","奈良県"],"鳥取県":["兵庫県","島根県","岡山県","広島県"],"島根県":["鳥取県","広島県","山口県"],"岡山県":["兵庫県","鳥取県","広島県","香川県"],"広島県":["鳥取県","島根県","岡山県","山口県","愛媛県"],"山口県":["島根県","広島県","福岡県"],"徳島県":["兵庫県","香川県","愛媛県","高知県"],"香川県":["岡山県","徳島県","愛媛県"],"愛媛県":["広島県","徳島県","香川県","高知県"],"高知県":["徳島県","愛媛県"],"福岡県":["山口県","佐賀県","熊本県","大分県"],"佐賀県":["福岡県","長崎県"],"長崎県":["佐賀県"],"熊本県":["福岡県","大分県","宮崎県","鹿児島県"],"大分県":["福岡県","熊本県","宮崎県"],"宮崎県":["熊本県","大分県","鹿児島県"],"鹿児島県":["熊本県","宮崎県"],"沖縄県":[]};
+
+/* ============================================================
+   東京地理マスター — 全国版（47都道府県）
+   出典：国土数値情報（行政区域）を利用者がmapshaperで都道府県単位に
+   融合・簡略化（許容誤差700m）したもの。北海道の北方四島、
+   東京都の南方の離島は、データとしては保持しつつ、初期の地図表示
+   範囲の計算からは除外している（沖縄本島・八重山諸島は含む）。
+   隣接関係は、簡略化後のポリゴン同士の最短距離が3km未満かどうかで
+   機械的に判定した（23区版のような手作りリストではない）。 */
+/* 北海道だけ「道」が地名そのものの一部で、他県のような取り外し可能な接尾辞ではない */
+function stripSuffix(full){ return full==='北海道' ? full : full.replace(/[都道府県]$/,''); }
+const PREF_NAMES = Object.keys(PREF_PACKED).map(stripSuffix);
+const PREF_SUFFIX = {}; for(const k in PREF_PACKED) PREF_SUFFIX[stripSuffix(k)] = (k==='北海道'?'':k.slice(-1));
+function prefFull(bare){ return bare==='北海道' ? bare : bare + (PREF_SUFFIX[bare]||'県'); }
+
+const KP = Math.cos(36.0*Math.PI/180), PORG={lat:38.5,lon:135.5}, PSC=2600;
+const ppx = lo => (lo-PORG.lon)*KP*PSC, ppy = la => (PORG.lat-la)*PSC;
+const PGEOM = {}; // 都道府県名(フル)→[[ [lon,lat], ... ], ...]
+for(const k in PREF_PACKED) PGEOM[k] = PREF_PACKED[k].map(decPath);
+
+/* 初期表示範囲：北方四島・東京都南方の離島だけは枠の計算から外す */
+function isFrameOutlier(fullName, ring){
+  let maxLon=-999, minLat=999;
+  ring.forEach(c=>{ if(c[0]>maxLon)maxLon=c[0]; if(c[1]<minLat)minLat=c[1]; });
+  if(fullName==='北海道' && ring.every(c=>c[0]>146.5)) return true;
+  if(fullName==='東京都' && ring.every(c=>c[1]<26.0)) return true;
+  return false;
+}
+const PFULL = (()=>{
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for(const k in PGEOM) PGEOM[k].forEach(r=>{
+    if(isFrameOutlier(k,r)) return;
+    r.forEach(c=>{const x=ppx(c[0]),y=ppy(c[1]);
+      if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;});
+  });
+  const padX=(x1-x0)*0.05, padY=(y1-y0)*0.05;
+  return [x0-padX, y0-padY, (x1-x0)+padX*2, (y1-y0)+padY*2];
+})();
+/* 明度をはっきり分けた6色。隣接情報(PREF_ADJ)を使って、
+   隣り合う都道府県が同じ色にならないように貪欲彩色する。 */
+const PFILL = ['#5B9BD5','#70AD47','#D4A017','#C0504D','#8064A2','#4BACC6'];
+const PCOLOR = (()=>{
+  const names = Object.keys(PGEOM);
+  const col = {};
+  names.forEach(full=>{
+    const used = new Set((PREF_ADJ[full]||[]).map(n=>col[n]).filter(v=>v!==undefined));
+    let c = 0; while(used.has(c)) c++;
+    col[full] = c % PFILL.length;
+  });
+  return col;
+})();
+/* 面積の重心（シューレース公式）。凹んだ形や飛び地の多い県でも
+   その輪の内側に収まりやすい。ラベルは「一番大きい島（リング）」だけを
+   見て置く（諸島全体のbboxだと、島と島の間の海に落ちてしまうため）。 */
+function ringArea(r){
+  let a=0; for(let i=0;i<r.length-1;i++) a += r[i][0]*r[i+1][1]-r[i+1][0]*r[i][1];
+  return a/2;
+}
+function ringCentroid(r){
+  let A=0,cx=0,cy=0;
+  for(let i=0;i<r.length-1;i++){
+    const x0=r[i][0],y0=r[i][1],x1=r[i+1][0],y1=r[i+1][1],cr=x0*y1-x1*y0;
+    A+=cr; cx+=(x0+x1)*cr; cy+=(y0+y1)*cr;
+  }
+  A/=2;
+  if(Math.abs(A)<1e-9){
+    const xs=r.map(p=>p[0]),ys=r.map(p=>p[1]);
+    return [xs.reduce((a,b)=>a+b,0)/xs.length, ys.reduce((a,b)=>a+b,0)/ys.length];
+  }
+  return [cx/(6*A), cy/(6*A)];
+}
+function mainRing(fullName){
+  const rings = PGEOM[fullName];
+  return rings.reduce((best,r)=>Math.abs(ringArea(r))>Math.abs(ringArea(best))?r:best, rings[0]);
+}
+function inRing(pt, r){
+  let c=false; const n=r.length;
+  for(let i=0,j=n-1;i<n;j=i++){
+    const xi=r[i][0],yi=r[i][1],xj=r[j][0],yj=r[j][1];
+    if(((yi>pt[1])!==(yj>pt[1])) && (pt[0] < (xj-xi)*(pt[1]-yi)/(yj-yi)+xi)) c=!c;
+  }
+  return c;
+}
+/* 面積重心が入り江の外（V字・三日月形の県）に落ちることがあるので、
+   その場合は頂点の単純平均、それでもだめなら重心に一番近い頂点、の順に試す */
+function safeCentroid(r){
+  const a = ringCentroid(r);
+  if(inRing(a, r)) return a;
+  const xs=r.map(p=>p[0]), ys=r.map(p=>p[1]);
+  const b = [xs.reduce((s,v)=>s+v,0)/xs.length, ys.reduce((s,v)=>s+v,0)/ys.length];
+  if(inRing(b, r)) return b;
+  let best=r[0], bd=1e18;
+  r.forEach(p=>{const d=(p[0]-a[0])**2+(p[1]-a[1])**2; if(d<bd){bd=d; best=p;}});
+  /* 海岸線ぎりぎりの頂点そのものだと不自然なので、面積重心の方へ少し引き寄せる */
+  const nudged = [(best[0]*0.4+a[0]*0.6), (best[1]*0.4+a[1]*0.6)];
+  return inRing(nudged, r) ? nudged : best;
+}
+function bboxOf(pts){
+  const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+  const x0=Math.min.apply(null,xs), x1=Math.max.apply(null,xs);
+  const y0=Math.min.apply(null,ys), y1=Math.max.apply(null,ys);
+  return {x0,x1,y0,y1,w:x1-x0,h:y1-y0,cx:(x0+x1)/2,cy:(y0+y1)/2};
+}
+/* 内陸8県は、他県の隣接に囲まれて境界が入り組みやすいので、
+   ここだけ「収まりやすさ」を優先した特別扱いにする（下のPLABELで使う） */
+const LANDLOCKED = ['埼玉','群馬','栃木','山梨','長野','岐阜','滋賀','奈良'];
+
+function textBoxUnits(name, fontSizeUnits){
+  return {w: fontSizeUnits*name.length*0.98, h: fontSizeUnits*1.2};
+}
+function containFrac(ring, cx, cy, w, h){
+  const cols=6, rows=4; let hit=0;
+  for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){
+    const px2 = cx - w/2 + w*(i+0.5)/cols;
+    const py2 = cy - h/2 + h*(j+0.5)/rows;
+    if(inRing([px2,py2], ring)) hit++;
+  }
+  return hit/(cols*rows);
+}
+function boxesOverlap(a,b){
+  return !(a.x1<b.x0 || b.x1<a.x0 || a.y1<b.y0 || b.y1<a.y0);
+}
+/* 全国地図はviewBoxの座標単位が非常に大きい（路線図とは桁が違う）ので、
+   fontSizeもその大きさに合わせて拡大しないと画面上では点にしかならない。
+   PFULL[2]（初期の全体幅）を基準に、実際の画面px相当に換算する。 */
+const PSCALE = PFULL[2] / 380;
+
+/* 47都道府県ぶんのラベル配置（位置・文字サイズ）を、読み込み時に一度だけ計算する。
+   ・海に面する都道府県：外接する四角形の中心に、四角形の短辺の30%のサイズで置く
+   （複雑な海岸線にきっちり収めようとすると文字が小さくなりすぎるため、
+   　ここは「他県とかぶらないように」という制約は課さない）。
+   ・内陸8県：文字の75%が県内に収まり、かつ他県の文字と重ならない範囲で、
+   　できるだけ大きく表示する（binary searchで最大サイズを探す）。 */
+const MIN_LABEL_PX = 5;               // どの県も最低これだけの画面pxは確保する
+const MIN_LABEL_UNITS = MIN_LABEL_PX * PSCALE;
+
+const PLABEL = (()=>{
+  const plan = {}; const placedBoxes = [];
+  const names = Object.keys(PGEOM).map(stripSuffix);
+
+  // 先に沿岸県（単純ルール）を確定させる。位置はどの県も重心に統一する。
+  names.filter(n=>LANDLOCKED.indexOf(n)<0).forEach(bare=>{
+    const full = prefFull(bare), r = mainRing(full);
+    const rp = r.map(pt=>[ppx(pt[0]),ppy(pt[1])]);
+    const c = safeCentroid(r), cx = ppx(c[0]), cy = ppy(c[1]);
+    const rb = bboxOf(rp);
+    /* 「サイズは外接する四角形の30%」＝文字の高さ（フォントサイズ）を
+       四角形の短辺の30%にする。最低でも画面上MIN_LABEL_PXは確保する。 */
+    const size = Math.max(Math.min(rb.w, rb.h) * 0.30, MIN_LABEL_UNITS);
+    const tb = textBoxUnits(bare, size);
+    plan[bare] = {cx, cy, size};
+    placedBoxes.push({x0:cx-tb.w/2,x1:cx+tb.w/2,y0:cy-tb.h/2,y1:cy+tb.h/2});
+  });
+
+  // 内陸8県：75%内包 かつ 他ラベルと非重複、を満たす最大サイズを探す（最低保証つき）
+  //（当たり判定は必ず投影後（ppx/ppy）の座標系で統一する）
+  names.filter(n=>LANDLOCKED.indexOf(n)>=0).forEach(bare=>{
+    const full = prefFull(bare), r = mainRing(full);
+    const rp = r.map(pt=>[ppx(pt[0]),ppy(pt[1])]);
+    const c = safeCentroid(r);
+    const cx = ppx(c[0]), cy = ppy(c[1]);
+    const rb = bboxOf(rp);
+    let lo=2, hi=Math.max(lo+1, rb.w/(bare.length*0.5)); // 探索の上限は県自体の横幅相当
+    let best=lo;
+    for(let iter=0; iter<22; iter++){
+      const mid=(lo+hi)/2;
+      const tb = textBoxUnits(bare, mid);
+      const box = {x0:cx-tb.w/2,x1:cx+tb.w/2,y0:cy-tb.h/2,y1:cy+tb.h/2};
+      const frac = containFrac(rp, cx, cy, tb.w, tb.h);
+      const overlap = placedBoxes.some(pb=>boxesOverlap(pb, box));
+      if(frac>=0.75 && !overlap){ best=mid; lo=mid; } else { hi=mid; }
+    }
+    best = Math.max(best, MIN_LABEL_UNITS);
+    const tb = textBoxUnits(bare, best);
+    plan[bare] = {cx, cy, size:best};
+    placedBoxes.push({x0:cx-tb.w/2,x1:cx+tb.w/2,y0:cy-tb.h/2,y1:cy+tb.h/2});
+  });
+  return plan;
+})();
+
+/* 47都道府県の地図。23区版のbuildWardMapと同じ「browse / answer / reveal」の
+   3モードを持つ。役割の分離もそのまま踏襲している。 */
+function buildPrefMap(o){
+  o = Object.assign({revealed:null,interactive:true,onTap:null,marks:[],mode:'browse',locked:true}, o||{});
+  let locked = !!o.locked;
+  const wrap = el('div','map-wrap geo-map');
+  const setTouch = () => { wrap.style.touchAction = locked ? 'auto' : 'none'; };
+  setTouch();
+  let vb = PFULL.slice();
+  const AR_P = PFULL[3]/PFULL[2];
+  const svg = sv('svg',{viewBox:vb.join(' '),preserveAspectRatio:'xMidYMid meet'});
+  const markOf = k => o.marks.find(m=>m.key===k);
+  const drawn = {};
+  for(const full in PGEOM){
+    const bare = stripSuffix(full);
+    const mk = markOf(bare);
+    const f = mk ? (mk.kind==='right'?'#4FA85A':(mk.kind==='wrong'?'#D5555A':PFILL[PCOLOR[full]])) : PFILL[PCOLOR[full]];
+    PGEOM[full].forEach(r=>{
+      const pg = sv('polygon',{points:r.map(c=>ppx(c[0]).toFixed(1)+','+ppy(c[1]).toFixed(1)).join(' '),
+        fill:f, stroke:mk?'var(--yamanote)':'var(--wardline)', 'stroke-width':mk?2.0:0.9,'stroke-linejoin':'round'});
+      if(o.interactive){ pg.style.cursor='pointer'; pg.setAttribute('data-pref',bare); pg.setAttribute('data-tap','1'); }
+      svg.appendChild(pg);
+    });
+  }
+  /* 答えの県を半透明の赤い丸で囲む。ラベルより先（背面）に描き、
+     文字はその上に重ねて描くことで、名前自体は隠れず読める */
+  if(o.arrow && PLABEL[o.arrow]){
+    const p = PLABEL[o.arrow];
+    const rb = bboxOf(mainRing(prefFull(o.arrow)).map(pt=>[ppx(pt[0]),ppy(pt[1])]));
+    const rr = Math.max(rb.w, rb.h) * 0.62;
+    svg.appendChild(sv('circle',{cx:p.cx, cy:p.cy, r:rr.toFixed(1),
+      fill:'#E8384A', 'fill-opacity':'0.38', stroke:'#E8384A', 'stroke-width':(rr*0.05).toFixed(2), 'stroke-opacity':'0.7'}));
+  }
+  function drawLabel(bare){
+    if(drawn[bare]) return; drawn[bare]=true;
+    const p = PLABEL[bare];
+    const t = tx(p.cx, p.cy, 'geo-wardname', bare);
+    t.setAttribute('font-size', p.size.toFixed(1)+'px');
+    svg.appendChild(t);
+  }
+  for(const full in PGEOM){
+    const bare = stripSuffix(full);
+    if(o.mode==='browse' && o.revealed && o.revealed.has(bare)) drawLabel(bare);
+    if(o.mode==='reveal') drawLabel(bare);
+  }
+  wrap.appendChild(svg);
+
+  function handleTap(bare){
+    if(o.mode==='browse'){ if(o.revealed) o.revealed.add(bare); drawLabel(bare); }
+    else if(o.mode==='answer'){ if(o.onTap) o.onTap(bare); }
+  }
+
+  /* 路線マスターの地図と同じドラッグ／ピンチ／ロック方式（実績のある実装をそのまま流用） */
+  const pts=new Map(); let last=null,pinch=null,moved=0,downG=null;
+  const apply=()=>svg.setAttribute('viewBox',vb.map(v=>v.toFixed(1)).join(' '));
+  const rect=()=>svg.getBoundingClientRect();
+  const toS=(cx,cy)=>{const r=rect();return{x:vb[0]+(cx-r.left)/r.width*vb[2],y:vb[1]+(cy-r.top)/r.height*vb[3]}};
+  const zoomAt=(f,cx,cy)=>{const nw=Math.min(PFULL[2]*1.5,Math.max(6,vb[2]*f)),k=nw/vb[2],p=toS(cx,cy);
+    vb[0]=p.x-(p.x-vb[0])*k; vb[1]=p.y-(p.y-vb[1])*k; vb[2]=nw; vb[3]=nw*AR_P; apply()};
+  const zc=f=>{const r=rect(); zoomAt(f, r.left+r.width/2, r.top+r.height/2)};
+  const clearDrag=()=>{pts.clear();last=null;pinch=null;downG=null;wrap.classList.remove('is-drag')};
+  svg.addEventListener('pointerdown',e=>{
+    if(locked){ downG=e.target.closest?e.target.closest('[data-tap]'):null;
+      if(downG&&o.interactive){handleTap(downG.getAttribute('data-pref'));downG=null} return; }
+    pts.set(e.pointerId,e);
+    if(pts.size===1){ last={x:e.clientX,y:e.clientY}; moved=0; wrap.classList.add('is-drag');
+      downG=e.target.closest?e.target.closest('[data-tap]'):null; }
+    if(pts.size===2){ const a=[...pts.values()]; pinch=Math.hypot(a[0].clientX-a[1].clientX,a[0].clientY-a[1].clientY); downG=null; }
+  });
+  svg.addEventListener('pointermove',e=>{
+    if(locked) return;
+    if(e.buttons===0 && e.pointerType!=='touch'){ if(pts.size)clearDrag(); return; }
+    if(!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId,e);
+    if(pts.size===2 && pinch){ const a=[...pts.values()];
+      const d=Math.hypot(a[0].clientX-a[1].clientX,a[0].clientY-a[1].clientY);
+      if(d>0){ zoomAt(pinch/d,(a[0].clientX+a[1].clientX)/2,(a[0].clientY+a[1].clientY)/2); pinch=d; moved=99; } return; }
+    if(pts.size===1 && last){ const r=rect();
+      const dx=(e.clientX-last.x)/r.width*vb[2], dy=(e.clientY-last.y)/r.height*vb[3];
+      moved+=Math.abs(dx)+Math.abs(dy); vb[0]-=dx; vb[1]-=dy; apply(); last={x:e.clientX,y:e.clientY}; }
+  });
+  const fin=()=>{ wrap.classList.remove('is-drag');
+    if(moved<9 && downG && o.interactive) handleTap(downG.getAttribute('data-pref'));
+    downG=null; last=null; pinch=null; };
+  ['pointerup','pointercancel'].forEach(ev=>svg.addEventListener(ev,e=>{
+    pts.delete(e.pointerId); if(pts.size===0) fin(); else if(pts.size<2) pinch=null; }));
+  const winUp=e=>{ if(!pts.size) return; pts.delete(e.pointerId); if(pts.size===0) clearDrag(); };
+  window.addEventListener('pointerup',winUp);
+  window.addEventListener('pointercancel',winUp);
+  window.addEventListener('blur',()=>{ if(pts.size) clearDrag(); });
+  let lastLeave=false;
+  svg.addEventListener('pointerleave',()=>{ if(pts.size===1 && last) lastLeave=true; });
+  svg.addEventListener('pointerenter',e=>{ if(lastLeave && e.buttons===0) clearDrag(); lastLeave=false; });
+  svg.addEventListener('wheel',e=>{ if(locked) return; e.preventDefault(); zoomAt(e.deltaY>0?1.14:0.88,e.clientX,e.clientY); },{passive:false});
+
+  const tl = el('div','map-tools');
+  const mb=(s2,fn,l)=>{const b=el('button',null,s2); b.setAttribute('aria-label',l);
+    b.onclick=ev=>{ev.stopPropagation();fn()}; return b};
+  tl.appendChild(mb('＋',()=>zc(0.76),'拡大'));
+  tl.appendChild(mb('－',()=>zc(1.3),'縮小'));
+  tl.appendChild(mb('⟲',()=>{vb=PFULL.slice();apply()},'全体表示'));
+  wrap.appendChild(tl);
+  if(o.locked){
+    tl.style.display='none';
+    const lk = el('button','maplock','🔒 地図を操作する');
+    lk.onclick=ev=>{ ev.stopPropagation();
+      locked=!locked;
+      lk.className=locked?'maplock':'maplock is-on';
+      lk.textContent=locked?'🔒 地図を操作する':'✋ 操作中（押すと固定）';
+      tl.style.display=locked?'none':'flex';
+      setTouch(); };
+    wrap.appendChild(lk);
+  }
+  return {wrap:wrap, svg:svg};
+}
+
+/* ---------- クイズ本体（23区版と同じ形） ---------- */
+const PREF_ROUND = 10;
+/* 8地方区分（一般的な区分。沖縄は九州地方に含めて「九州・沖縄地方」とする） */
+const REGIONS = {
+  '北海道地方':['北海道'],
+  '東北地方':['青森','岩手','宮城','秋田','山形','福島'],
+  '関東地方':['茨城','栃木','群馬','埼玉','千葉','東京','神奈川'],
+  '中部地方':['新潟','富山','石川','福井','山梨','長野','岐阜','静岡','愛知'],
+  '近畿地方':['三重','滋賀','京都','大阪','兵庫','奈良','和歌山'],
+  '中国地方':['鳥取','島根','岡山','広島','山口'],
+  '四国地方':['徳島','香川','愛媛','高知'],
+  '九州・沖縄地方':['福岡','佐賀','長崎','熊本','大分','宮崎','鹿児島','沖縄']
+};
+const REGION_OF = {};
+Object.keys(REGIONS).forEach(r=>REGIONS[r].forEach(p=>REGION_OF[p]=r));
+
+function genPrefQ(){
+  const kind = pick(['where','adj','region']);
+  if(kind==='where'){
+    const target = pick(PREF_NAMES);
+    return {t:'where', target:target, text: target+prefSuffix(target)+'はどこ？　地図から選んでください。'};
+  }
+  if(kind==='region'){
+    const rname = pick(Object.keys(REGIONS));
+    const members = REGIONS[rname];
+    const answer = pick(members);
+    const others = shuffle(PREF_NAMES.filter(w=>members.indexOf(w)<0)).slice(0,3);
+    if(others.length<3) return genPrefQ();
+    return {t:'region', region:rname, answer:answer,
+      options:shuffle([answer].concat(others)),
+      text: rname+'に含まれるのは？'};
+  }
+  const target = pick(PREF_NAMES);
+  const adjFull = PREF_ADJ[prefFull(target)] || [];
+  const adj = adjFull.map(stripSuffix);
+  if(!adj.length) return genPrefQ();
+  const answer = pick(adj);
+  const notAdj = shuffle(PREF_NAMES.filter(w=>w!==target && adj.indexOf(w)<0)).slice(0,3);
+  if(notAdj.length<3) return genPrefQ();
+  return {t:'adj', target:target, answer:answer,
+    options:shuffle([answer].concat(notAdj)),
+    text: target+prefSuffix(target)+'に隣接するのは？'};
+}
+const prefSuffix = bare => bare==='北海道' ? '' : (PREF_SUFFIX[bare]||'県');
+
+function startPrefSession(){
+  state.geoP = {i:0, res:[], q:null, ans:false, revealed:new Set()};
+  nextPrefQ();
+}
+function nextPrefQ(){
+  const G = state.geoP;
+  if(G.i>=PREF_ROUND){ finishPref(); return; }
+  G.q = genPrefQ(); G.ans=false; G.revealed=new Set();
+  render('geoPrefQuiz');
+}
+function finishPref(){
+  const G = state.geoP, ok = G.res.filter(Boolean).length;
+  render('geoPrefResult', {ok:ok, pct:Math.round(ok/PREF_ROUND*100)});
+}
+function gradePref(ok, extra){
+  const G = state.geoP;
+  if(G.ans) return;
+  G.ans = true; G.res.push(ok);
+  prefFeedback(ok, extra||{});
+}
+function screenGeoPrefQuiz(){
+  const G = state.geoP, q = G.q, w = el('div');
+  const pr = el('div','prog'), bs = el('div','prog__b');
+  for(let i=0;i<PREF_ROUND;i++) bs.appendChild(el('i', i<G.res.length ? (G.res[i]?'ok':'ng') : (i===G.i?'now':'')));
+  pr.appendChild(bs);
+  const ab = el('button', null, 'やめる');
+  ab.onclick=()=>render('geoNational');
+  pr.appendChild(ab);
+  w.appendChild(pr);
+
+  const browseMap = buildPrefMap({revealed:G.revealed, interactive:true, mode:'browse'});
+  w.appendChild(browseMap.wrap);
+  w.appendChild(cap('都道府県をタップすると名前が表示されます（次の問題で再び隠れます）／この地図は確認用で、解答には使いません'));
+
+  w.appendChild(el('p','q-text',q.text));
+
+  if(q.t==='where'){
+    w.appendChild(el('p','hint','下の地図をタップして解答してください。'));
+    const answerMap = buildPrefMap({interactive:true, mode:'answer', onTap:(name)=>{
+      if(G.ans) return;
+      gradePref(name===q.target, {picked:name});
+    }});
+    w.appendChild(answerMap.wrap);
+  }
+  if(q.t==='adj' || q.t==='region'){
+    q.options.forEach((o,n)=>{
+      const b = el('button','opt');
+      b.innerHTML = '<span class="opt__k">'+(n+1)+'</span>'+o+prefSuffix(o);
+      b.onclick=()=>{
+        if(G.ans) return;
+        const l = w.querySelectorAll('.opt');
+        for(let i=0;i<l.length;i++){ l[i].disabled=true;
+          if(q.options[i]===q.answer) l[i].classList.add('is-r');
+          else if(q.options[i]===o) l[i].classList.add('is-w'); }
+        gradePref(o===q.answer, {picked:o});
+      };
+      w.appendChild(b);
+    });
+  }
+  return w;
+}
+function prefFeedback(ok, ex){
+  const G = state.geoP, q = G.q;
+  const card = el('div','card');
+  card.appendChild(el('div','verdict '+(ok?'ok':'ng'), ok?'正解':'不正解'));
+  const body = el('div','explain');
+  const marks = []; let arrow = null;
+  if(q.t==='where'){
+    arrow = q.target;
+    marks.push({key:q.target, kind:'right'});
+    if(ex.picked && ex.picked!==q.target) marks.push({key:ex.picked, kind:'wrong'});
+    body.innerHTML = '<b>'+q.target+prefSuffix(q.target)+'</b>の位置はここです。'
+      + (ex.picked && ex.picked!==q.target ? 'タップしたのは <b>'+ex.picked+prefSuffix(ex.picked)+'</b> でした。' : '');
+  } else if(q.t==='region'){
+    arrow = q.answer;
+    marks.push({key:q.answer, kind:'right'});
+    const members = REGIONS[q.region].map(b=>b+prefSuffix(b));
+    body.innerHTML = '<b>'+q.region+'</b>に含まれるのは '+members.join('、')+' です。'
+      + (q.answer!==null? '（正解は <b>'+q.answer+prefSuffix(q.answer)+'</b>）':'');
+  } else {
+    arrow = q.answer;
+    marks.push({key:q.target, kind:'right'}); marks.push({key:q.answer, kind:'right'});
+    const adjFull = PREF_ADJ[prefFull(q.target)]||[];
+    const adjList = adjFull.map(f=>{const b=stripSuffix(f); return b+prefSuffix(b)});
+    body.innerHTML = '<b>'+q.target+prefSuffix(q.target)+'</b>に隣接するのは '
+      + (adjList.length? adjList.join('、') : '（海に囲まれており、陸上で隣接する都道府県はありません）') + ' です。';
+  }
+  card.appendChild(body);
+  const mb = el('div'); mb.style.marginTop='14px';
+  mb.appendChild(el('div','eyebrow','位置を確認（赤い丸＝答え）'));
+  mb.appendChild(buildPrefMap({mode:'reveal', interactive:false, marks:marks, arrow:arrow}).wrap);
+  card.appendChild(mb);
+  const btn = el('button','btn', G.i+1>=PREF_ROUND ? '結果を見る' : '次の問題へ');
+  btn.onclick=()=>{ G.i++; nextPrefQ(); };
+  card.appendChild(btn);
+  $('#screen').appendChild(card);
+  card.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function screenGeoPrefResult(d){
+  const w = el('div'), c = el('div','card');
+  c.appendChild(el('div','eyebrow','東京地理マスター — 47都道府県クイズ'));
+  c.innerHTML += '<div class="score">'+d.ok+'<small> / '+PREF_ROUND+'　正答率 '+d.pct+'%</small></div>';
+  w.appendChild(c);
+  const b1 = el('button','btn','もう一度');
+  b1.onclick = startPrefSession;
+  w.appendChild(b1);
+  const b2 = el('button','btn btn--gh','戻る');
+  b2.style.marginTop='10px';
+  b2.onclick = ()=>render('geoNational');
+  w.appendChild(b2);
+  return w;
+}
+function screenGeoNational(){
+  const w = el('div');
+  const back = el('button','btn btn--gh btn--sm','← 地域選択に戻る');
+  back.style.marginBottom='10px';
+  back.onclick = ()=>render('geo');
+  w.appendChild(back);
+  const hero = el('div','hero');
+  hero.innerHTML = '<div class="hero__t">全国</div><div class="hero__s">遊びたいものを選んでください</div>';
+  w.appendChild(hero);
+  const b1 = el('button','pick');
+  b1.innerHTML = '<span class="pick__i">🗾</span><span class="pick__b"><b>47都道府県クイズ</b>'
+    + '<em>「○○県はどこ？」「隣接する県は？」を地図で答える。</em></span><span class="pick__a">›</span>';
+  b1.onclick = startPrefSession;
+  w.appendChild(b1);
+  return w;
+}
+
+function screenGameSelect(){
+  const w=el('div');
+  const hero=el('div','hero');
+  hero.innerHTML='<div class="hero__t">TOKYO MASTER</div><div class="hero__s">遊びたいゲームを選んでください</div>';
+  w.appendChild(hero);
+  const b1=el('button','pick');
+  b1.innerHTML='<span class="pick__i">🚃</span><span class="pick__b"><b>東京路線マスター</b>'
+    +'<em>23区の鉄道路線・駅を、クイズと学習モードで覚える。</em></span><span class="pick__a">›</span>';
+  b1.onclick=enterRailMaster;
+  w.appendChild(b1);
+  const b2=el('button','pick');
+  b2.innerHTML='<span class="pick__i">🗺</span><span class="pick__b"><b>東京地理マスター</b>'
+    +'<em>23区と47都道府県の場所を、地図クイズで覚える。</em></span><span class="pick__a">›</span>';
+  b2.onclick=()=>render('geo');
+  w.appendChild(b2);
+  return w;
+}
+function screenGeoComingSoon(){
+  const w=el('div'),c=el('div','card');
+  c.appendChild(el('div','eyebrow','東京地理マスター'));
+  c.appendChild(el('p','hint','準備中です。内容はこれから作成します。'));
+  w.appendChild(c);
+  const b=el('button','btn btn--gh','ゲーム選択に戻る');
+  b.onclick=()=>render('gameselect');
+  w.appendChild(b);
+  return w;
+}
+/* 東京路線マスターに入る（既存の自動ログイン判定はここで行う） */
+async function enterRailMaster(){
   let last='';
   try{const r=await STORE.get(SKEY);last=r&&r.value?r.value:''}catch(e){}
   if(last){const a=await getAccounts();
     if(a[last]){state.user=last;state.isAdmin=isAdminCred(last,a[last].pw);
       state.admin=false;applyAccount(a[last]);render('home');return}}
   render('login');
+}
+document.getElementById('signRow').addEventListener('click',()=>{
+  if(state.session&&!confirm('進行中のクイズを中断します。よろしいですか？'))return;
+  if(state.check&&!confirm('進行中の確認テストを中断します。よろしいですか？'))return;
+  state.session=null;state.check=null;state.review=null;
+  render('gameselect');
+});
+
+(async()=>{
+  render('gameselect');
 })();
 
 </script>
