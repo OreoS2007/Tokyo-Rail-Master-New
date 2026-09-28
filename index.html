@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>東京路線マスター</title>
+<title>地理マスター</title>
 <style>
 :root{--paper:#EDEFEA;--plate:#fff;--signage:#16232F;--signage2:#233443;--ink:#1A2530;--muted:#6B7B88;
 --rule:#C9CFC8;--yamanote:#9ACD32;--alert:#D0353F;--ok:#4E8A0F;--sea:#132A38;--land:#101A22;
@@ -2368,11 +2368,11 @@ const SCREENS={login:()=>screenLogin(),home:screenHome,study:screenStudy,quiz:sc
  check:screenCheck,checkdone:()=>screenCheckDone(vd),
  admin:screenAdmin,revdone:()=>screenRevDone(vd),
  quizsetup:screenQuizSetup,stats:screenStats,mix:screenMix,
- gameselect:screenGameSelect,geo:screenGeo,geoNational:screenGeoNational,geoTokyo:screenGeoTokyo,
+ gameselect:screenGameSelect,geoNational:screenGeoNational,geoTokyo:screenGeoTokyo,
  geoQuiz:screenGeoQuiz,geoResult:()=>screenGeoResult(vd),
  geoPrefQuiz:screenGeoPrefQuiz,geoPrefResult:()=>screenGeoPrefResult(vd),
  geoKuniQuiz:screenGeoKuniQuiz,geoKuniResult:()=>screenGeoKuniResult(vd)};
-const OUTER_VIEWS={gameselect:1,geo:1,geoNational:1,geoTokyo:1,geoQuiz:1,geoResult:1,
+const OUTER_VIEWS={gameselect:1,geoNational:1,geoTokyo:1,geoQuiz:1,geoResult:1,
  geoPrefQuiz:1,geoPrefResult:1,geoKuniQuiz:1,geoKuniResult:1};
 function render(v,d,keep){
   const sy=keep?window.scrollY:0;
@@ -2430,7 +2430,7 @@ window.addEventListener('beforeunload',e=>{if(state.dirty){e.preventDefault();e.
 /* ===== ゲーム選択（最初の画面） ===== */
 
 /* ============================================================
-   東京地理マスター（新規）
+   東京地理マスター（23区）
    ============================================================ */
 /* 23区の隣接関係。国土数値情報のような一次データではなく、
    一般的な地理知識にもとづく手作りのリストです。お台場付近の
@@ -2665,34 +2665,15 @@ function screenGeoResult(d){
   return w;
 }
 
-/* ---------- 地域選択・東京トップ ---------- */
-function screenGeo(){
+/* ---------- 東京地理マスターのトップ ---------- */
+function screenGeoTokyo(){
   const w = el('div');
   const back = el('button','btn btn--gh btn--sm','← ゲーム選択に戻る');
   back.style.marginBottom='10px';
   back.onclick = ()=>render('gameselect');
   w.appendChild(back);
   const hero = el('div','hero');
-  hero.innerHTML = '<div class="hero__t">東京地理マスター</div><div class="hero__s">地域を選んでください</div>';
-  w.appendChild(hero);
-  const b1 = el('button','pick');
-  b1.innerHTML = '<span class="pick__i">🗼</span><span class="pick__b"><b>東京</b><em>23区の場所を覚える。</em></span><span class="pick__a">›</span>';
-  b1.onclick = ()=>render('geoTokyo');
-  w.appendChild(b1);
-  const b2 = el('button','pick');
-  b2.innerHTML = '<span class="pick__i">🗾</span><span class="pick__b"><b>全国</b><em>47都道府県と旧国名の場所を覚える。</em></span><span class="pick__a">›</span>';
-  b2.onclick = ()=>render('geoNational');
-  w.appendChild(b2);
-  return w;
-}
-function screenGeoTokyo(){
-  const w = el('div');
-  const back = el('button','btn btn--gh btn--sm','← 地域選択に戻る');
-  back.style.marginBottom='10px';
-  back.onclick = ()=>render('geo');
-  w.appendChild(back);
-  const hero = el('div','hero');
-  hero.innerHTML = '<div class="hero__t">東京</div><div class="hero__s">遊びたいものを選んでください</div>';
+  hero.innerHTML = '<div class="hero__t">東京地理マスター</div><div class="hero__s">遊びたいものを選んでください</div>';
   w.appendChild(hero);
   const b1 = el('button','pick');
   b1.innerHTML = '<span class="pick__i">🧭</span><span class="pick__b"><b>23区クイズ</b>'
@@ -2706,7 +2687,7 @@ const PREF_PACKED={"北海道":["m}k_G_swzYezC|lGyjG|vBwt@~qDw{D`nAkaCx|GxoD~gX_
 const PREF_ADJ={"北海道":[],"青森県":["岩手県","秋田県"],"岩手県":["青森県","宮城県","秋田県"],"宮城県":["岩手県","秋田県","山形県","福島県"],"秋田県":["青森県","岩手県","宮城県","山形県"],"山形県":["宮城県","秋田県","福島県","新潟県"],"福島県":["宮城県","山形県","茨城県","栃木県","群馬県","新潟県"],"茨城県":["福島県","栃木県","群馬県","埼玉県","千葉県"],"栃木県":["福島県","茨城県","群馬県","埼玉県"],"群馬県":["福島県","茨城県","栃木県","埼玉県","新潟県","長野県"],"埼玉県":["茨城県","栃木県","群馬県","千葉県","東京都","山梨県","長野県"],"千葉県":["茨城県","埼玉県","東京都"],"東京都":["埼玉県","千葉県","神奈川県","山梨県"],"神奈川県":["東京都","山梨県","静岡県"],"新潟県":["山形県","福島県","群馬県","富山県","長野県"],"富山県":["新潟県","石川県","長野県","岐阜県"],"石川県":["富山県","福井県","岐阜県"],"福井県":["石川県","岐阜県","滋賀県","京都府"],"山梨県":["埼玉県","東京都","神奈川県","長野県","静岡県"],"長野県":["群馬県","埼玉県","新潟県","富山県","山梨県","岐阜県","静岡県","愛知県"],"岐阜県":["富山県","石川県","福井県","長野県","愛知県","三重県","滋賀県"],"静岡県":["神奈川県","山梨県","長野県","愛知県"],"愛知県":["長野県","岐阜県","静岡県","三重県"],"三重県":["岐阜県","愛知県","滋賀県","京都府","奈良県","和歌山県"],"滋賀県":["福井県","岐阜県","三重県","京都府"],"京都府":["福井県","三重県","滋賀県","大阪府","兵庫県","奈良県"],"大阪府":["京都府","兵庫県","奈良県","和歌山県"],"兵庫県":["京都府","大阪府","鳥取県","岡山県","徳島県"],"奈良県":["三重県","京都府","大阪府","和歌山県"],"和歌山県":["三重県","大阪府","奈良県"],"鳥取県":["兵庫県","島根県","岡山県","広島県"],"島根県":["鳥取県","広島県","山口県"],"岡山県":["兵庫県","鳥取県","広島県","香川県"],"広島県":["鳥取県","島根県","岡山県","山口県","愛媛県"],"山口県":["島根県","広島県","福岡県"],"徳島県":["兵庫県","香川県","愛媛県","高知県"],"香川県":["岡山県","徳島県","愛媛県"],"愛媛県":["広島県","徳島県","香川県","高知県"],"高知県":["徳島県","愛媛県"],"福岡県":["山口県","佐賀県","熊本県","大分県"],"佐賀県":["福岡県","長崎県"],"長崎県":["佐賀県"],"熊本県":["福岡県","大分県","宮崎県","鹿児島県"],"大分県":["福岡県","熊本県","宮崎県"],"宮崎県":["熊本県","大分県","鹿児島県"],"鹿児島県":["熊本県","宮崎県"],"沖縄県":[]};
 
 /* ============================================================
-   東京地理マスター — 全国版（47都道府県）
+   全国地理マスター — 47都道府県
    出典：国土数値情報（行政区域）を利用者がmapshaperで都道府県単位に
    融合・簡略化（許容誤差700m）したもの。北海道の北方四島、
    東京都の南方の離島は、データとしては保持しつつ、初期の地図表示
@@ -3173,7 +3154,7 @@ function prefFeedback(ok, ex){
 }
 function screenGeoPrefResult(d){
   const w = el('div'), c = el('div','card');
-  c.appendChild(el('div','eyebrow','東京地理マスター — 47都道府県クイズ'));
+  c.appendChild(el('div','eyebrow','全国地理マスター — 47都道府県クイズ'));
   c.innerHTML += '<div class="score">'+d.ok+'<small> / '+PREF_ROUND+'　正答率 '+d.pct+'%</small></div>';
   w.appendChild(c);
   const b1 = el('button','btn','もう一度');
@@ -3186,7 +3167,7 @@ function screenGeoPrefResult(d){
   return w;
 }
 /* ============================================================
-   東京地理マスター — 旧国名（令制国）73国
+   全国地理マスター — 旧国名（令制国）73国
    出典：人間文化研究機構「幕末明治地勢地図境界データ」（CC BY-NC）の
    国別国境K01～K73（北海道11国・琉球を除く）を、mapshaperで国ごとに融合し
    許容誤差700mで簡略化したもの。「對馬」は現代の字体「対馬」に改めた。
@@ -3400,7 +3381,7 @@ function kuniFeedback(ok, ex){
 }
 function screenGeoKuniResult(d){
   const w = el('div'), c = el('div','card');
-  c.appendChild(el('div','eyebrow','東京地理マスター — 旧国名クイズ'));
+  c.appendChild(el('div','eyebrow','全国地理マスター — 旧国名クイズ'));
   c.innerHTML += '<div class="score">'+d.ok+'<small> / '+KUNI_ROUND+'　正答率 '+d.pct+'%</small></div>';
   w.appendChild(c);
   const b1 = el('button','btn','もう一度');
@@ -3416,12 +3397,12 @@ function screenGeoKuniResult(d){
 
 function screenGeoNational(){
   const w = el('div');
-  const back = el('button','btn btn--gh btn--sm','← 地域選択に戻る');
+  const back = el('button','btn btn--gh btn--sm','← ゲーム選択に戻る');
   back.style.marginBottom='10px';
-  back.onclick = ()=>render('geo');
+  back.onclick = ()=>render('gameselect');
   w.appendChild(back);
   const hero = el('div','hero');
-  hero.innerHTML = '<div class="hero__t">全国</div><div class="hero__s">遊びたいものを選んでください</div>';
+  hero.innerHTML = '<div class="hero__t">全国地理マスター</div><div class="hero__s">遊びたいものを選んでください</div>';
   w.appendChild(hero);
   const b1 = el('button','pick');
   b1.innerHTML = '<span class="pick__i">🗾</span><span class="pick__b"><b>47都道府県クイズ</b>'
@@ -3440,7 +3421,7 @@ function screenGeoNational(){
 function screenGameSelect(){
   const w=el('div');
   const hero=el('div','hero');
-  hero.innerHTML='<div class="hero__t">TOKYO MASTER</div><div class="hero__s">遊びたいゲームを選んでください</div>';
+  hero.innerHTML='<div class="hero__t">地理マスター</div><div class="hero__s">遊びたいゲームを選んでください</div>';
   w.appendChild(hero);
   const b1=el('button','pick');
   b1.innerHTML='<span class="pick__i">🚃</span><span class="pick__b"><b>東京路線マスター</b>'
@@ -3448,20 +3429,15 @@ function screenGameSelect(){
   b1.onclick=enterRailMaster;
   w.appendChild(b1);
   const b2=el('button','pick');
-  b2.innerHTML='<span class="pick__i">🗺</span><span class="pick__b"><b>東京地理マスター</b>'
-    +'<em>23区・47都道府県・旧国名の場所を、地図クイズで覚える。</em></span><span class="pick__a">›</span>';
-  b2.onclick=()=>render('geo');
+  b2.innerHTML='<span class="pick__i">🗼</span><span class="pick__b"><b>東京地理マスター</b>'
+    +'<em>23区の場所を、地図クイズで覚える。</em></span><span class="pick__a">›</span>';
+  b2.onclick=()=>render('geoTokyo');
   w.appendChild(b2);
-  return w;
-}
-function screenGeoComingSoon(){
-  const w=el('div'),c=el('div','card');
-  c.appendChild(el('div','eyebrow','東京地理マスター'));
-  c.appendChild(el('p','hint','準備中です。内容はこれから作成します。'));
-  w.appendChild(c);
-  const b=el('button','btn btn--gh','ゲーム選択に戻る');
-  b.onclick=()=>render('gameselect');
-  w.appendChild(b);
+  const b3=el('button','pick');
+  b3.innerHTML='<span class="pick__i">🗾</span><span class="pick__b"><b>全国地理マスター</b>'
+    +'<em>47都道府県と旧国名の場所を、地図クイズで覚える。</em></span><span class="pick__a">›</span>';
+  b3.onclick=()=>render('geoNational');
+  w.appendChild(b3);
   return w;
 }
 /* 東京路線マスターに入る（既存の自動ログイン判定はここで行う） */
