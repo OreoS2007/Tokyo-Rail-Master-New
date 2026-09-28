@@ -737,8 +737,26 @@ const fmtDue=ms=>{const d=Math.ceil((ms-Date.now())/DAY);
   return d<=0?'今すぐ':(d===1?'明日':d+'日後')};
 
 /* ===== 5. 地図 ===== */
-/* 区ごとにごくわずかに色を変える（境界が読み取れる程度、目立たせない） */
+/* 23区クイズ（東京地理マスター）の地図の区の色 */
 const WARD_FILL=['#5B9BD5','#70AD47','#D4A017','#C0504D','#8064A2','#4BACC6','#E08A3C','#6FA88A'];
+/* 路線マスターの地図の区の色：路線の色が主役になるよう、落ち着いた暗い青灰色の1系統にし、
+   隣り合う区（WARD_ADJ）は明るさを変えて区別する。隣接の多い区から順に貪欲彩色 */
+const RAIL_WARD_LIGHT = [15, 20, 25, 30];
+let RAIL_WARD_FILL = null;
+function railWardFill(k){
+  if(!RAIL_WARD_FILL){
+    const shade = {}, names = Object.keys(WARD_ADJ)
+      .sort((a,b)=>WARD_ADJ[b].length-WARD_ADJ[a].length);
+    names.forEach(n=>{
+      const used = new Set(WARD_ADJ[n].map(m=>shade[m]).filter(v=>v!==undefined));
+      let s = 0; while(used.has(s)) s++;
+      shade[n] = s;
+    });
+    RAIL_WARD_FILL = {};
+    names.forEach(n=>RAIL_WARD_FILL[n+'区'] = 'hsl(205,16%,'+RAIL_WARD_LIGHT[shade[n] % RAIL_WARD_LIGHT.length]+'%)');
+  }
+  return RAIL_WARD_FILL[k] || 'hsl(205,16%,20%)';
+}
 const NS='http://www.w3.org/2000/svg';
 const sv=(t,a)=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);return n};
 const tx=(x,y,c,t,an,ex)=>{const n=sv('text',Object.assign({x:x,y:y,class:'lbl '+c,'text-anchor':an||'middle'},ex||{}));n.textContent=t;return n};
@@ -762,7 +780,7 @@ function buildMap(o){
   let wi=0;
   for(const k in WARDS){
     const hl=(o.hlWard===k);
-    const f=hl?'#4FA85A':WARD_FILL[wi%WARD_FILL.length];wi++;
+    const f=hl?'#4FA85A':railWardFill(k);wi++;
     WARDS[k].forEach(r=>svg.appendChild(sv('polygon',
       {points:enc(r),fill:f,stroke:hl?'var(--yamanote)':'var(--wardline)',
        'stroke-width':hl?2.4:1.1,'stroke-linejoin':'round'})));
