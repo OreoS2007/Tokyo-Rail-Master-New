@@ -1480,6 +1480,7 @@ function doneCheck(){
   const passed=pct>=50;
   markCleared(C.li,C.si,passed);
   stopTimer();
+  state.check=null; // 終わったテストを「進行中」のまま残さない（残るとナビで中断確認が出続ける）
   if(C.rev&&state.review){state.review.done++;if(passed)state.review.ok++;nextReview();return}
   render('checkdone',{pct:pct,ok:C.ok,n:C.qs.length,passed:passed,li:C.li,si:C.si});
 }
@@ -2121,7 +2122,7 @@ async function doLogin(isNew){
   }
 }
 async function logout(){
-  if(state.dirty&&!confirm('保存していない進捗があります。保存せずにログアウトしますか？'))return;
+  if(state.dirty&&!await askConfirm('保存していない進捗があります。保存せずにログアウトしますか？','ログアウトする'))return;
   state.user=null;state.isAdmin=false;state.admin=false;state.progress=blankProgress();
   try{await STORE.set(SKEY,'')}catch(e){}
   render('login');
@@ -2175,6 +2176,7 @@ async function finish(){const s=state.session,ok=s.res.filter(Boolean).length,pc
     if(state.progress.unlocked<=state.level)state.progress.unlocked=Math.min(4,state.level+1);
   }
   stopTimer();touch();
+  state.session=null; // 終わったクイズを「進行中」のまま残さない
   render('result',{ok:ok,pct:pct,li:li,diff:state.diff,newly:newly,mix:state.mixMode})}
 function abort(){stopTimer();state.session=null;render('home')}
 
@@ -2374,6 +2376,33 @@ const SCREENS={login:()=>screenLogin(),home:screenHome,study:screenStudy,quiz:sc
  geoKuniQuiz:screenGeoKuniQuiz,geoKuniResult:()=>screenGeoKuniResult(vd)};
 const OUTER_VIEWS={gameselect:1,geoNational:1,geoTokyo:1,geoQuiz:1,geoResult:1,
  geoPrefQuiz:1,geoPrefResult:1,geoKuniQuiz:1,geoKuniResult:1};
+/* 画面内の確認ダイアログ。ブラウザ標準の confirm() は、アプリ内ブラウザなど
+   環境によって表示されずに常にキャンセル扱いになり、画面を移動できなくなるため使わない */
+function askConfirm(msg, okLabel){
+  return new Promise(resolve=>{
+    const ov = el('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100;background:rgba(10,18,24,.55);'
+      + 'display:flex;align-items:center;justify-content:center;padding:16px';
+    const box = el('div','card');
+    /* .card のふわっと出る動きは付けない（途中で止まると箱が半透明のまま読みにくいため） */
+    box.style.cssText = 'max-width:360px;width:100%;margin:0;animation:none';
+    box.appendChild(el('p',null,msg));
+    const yes = el('button','btn',okLabel||'はい');
+    const no = el('button','btn btn--gh','キャンセル'); no.style.marginTop='10px';
+    const close = v=>{ ov.remove(); resolve(v); };
+    yes.onclick = ()=>close(true);
+    no.onclick = ()=>close(false);
+    ov.onclick = e=>{ if(e.target===ov) close(false); };
+    box.appendChild(yes); box.appendChild(no); ov.appendChild(box);
+    document.body.appendChild(ov);
+  });
+}
+/* クイズ・確認テストの途中で別の画面へ移るときの確認。移ってよければ true */
+async function leaveOk(){
+  if(state.session && !await askConfirm('進行中のクイズを中断します。よろしいですか？','中断する')) return false;
+  if(state.check && !await askConfirm('進行中の確認テストを中断します。よろしいですか？','中断する')) return false;
+  return true;
+}
 function render(v,d,keep){
   const sy=keep?window.scrollY:0;
   if(v){view=v;vd=d}
@@ -2411,9 +2440,8 @@ function render(v,d,keep){
     if(inAdmin)nav.className='nav nav--adm';else nav.className='nav';
     items.forEach(it=>{
       const b=el('button','nav__b'+(view===it[0]?' is-cur':''),'<i>'+it[2]+'</i>'+it[1]);
-      b.onclick=()=>{
-        if(state.session&&!confirm('進行中のクイズを中断します。よろしいですか？'))return;
-        if(state.check&&!confirm('進行中の確認テストを中断します。よろしいですか？'))return;
+      b.onclick=async()=>{
+        if(!await leaveOk())return;
         stopTimer();state.session=null;state.check=null;state.review=null;
         if(it[0]==='__exit'){state.admin=false;
           state.level=Math.min(state.level,state.progress.unlocked);render('home');return}
@@ -3449,10 +3477,9 @@ async function enterRailMaster(){
       state.admin=false;applyAccount(a[last]);render('home');return}}
   render('login');
 }
-document.getElementById('signRow').addEventListener('click',()=>{
-  if(state.session&&!confirm('進行中のクイズを中断します。よろしいですか？'))return;
-  if(state.check&&!confirm('進行中の確認テストを中断します。よろしいですか？'))return;
-  state.session=null;state.check=null;state.review=null;
+document.getElementById('signRow').addEventListener('click',async()=>{
+  if(!await leaveOk())return;
+  stopTimer();state.session=null;state.check=null;state.review=null;
   render('gameselect');
 });
 
