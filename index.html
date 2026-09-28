@@ -3177,15 +3177,32 @@ const KFULL = (()=>{
   const padX=(x1-x0)*0.05, padY=(y1-y0)*0.05;
   return [x0-padX, y0-padY, (x1-x0)+padX*2, (y1-y0)+padY*2];
 })();
-/* 隣り合う国が同じ色にならないように貪欲彩色（都道府県版と同じ6色） */
-const KCOLOR = (()=>{
-  const col = {};
+/* 五畿七道。KUNI_PACKED は K01～K73 の順で、この区分の順にちょうど並んでいる */
+const GOKI = (()=>{
+  const parts = [['畿内',5],['東海道',15],['東山道',13],['北陸道',7],['山陰道',8],['山陽道',8],['南海道',6],['西海道',11]];
+  const g = {}; let i = 0;
+  parts.forEach(([name,cnt])=>{ g[name] = KUNI_NAMES.slice(i, i+cnt); i += cnt; });
+  return g;
+})();
+const GOKI_OF = {};
+Object.keys(GOKI).forEach(r=>GOKI[r].forEach(n=>GOKI_OF[n]=r));
+/* 色：五畿七道ごとに色の系統（色相・彩度）を決め、同じ区分の中で隣り合う国は
+   明るさを変えて塗り分ける（区分内だけで貪欲彩色）。隣り合う区分どうしは
+   似た色相にならないように選び、正解・不正解の緑・赤とも紛れない色相にしている */
+const GOKI_HUE = {'畿内':[275,45],'東海道':[25,75],'東山道':[170,45],'北陸道':[215,60],
+  '山陰道':[30,30],'山陽道':[195,65],'南海道':[50,75],'西海道':[330,55]};
+const KUNI_LIGHT = [44, 56, 68, 34];
+const KFILL = (()=>{
+  const shade = {}, fill = {};
   KUNI_NAMES.forEach(n=>{
-    const used = new Set((KUNI_ADJ[n]||[]).map(m=>col[m]).filter(v=>v!==undefined));
-    let c = 0; while(used.has(c)) c++;
-    col[n] = c % PFILL.length;
+    const used = new Set((KUNI_ADJ[n]||[]).filter(m=>GOKI_OF[m]===GOKI_OF[n])
+      .map(m=>shade[m]).filter(v=>v!==undefined));
+    let s = 0; while(used.has(s)) s++;
+    shade[n] = s;
+    const hs = GOKI_HUE[GOKI_OF[n]];
+    fill[n] = 'hsl('+hs[0]+','+hs[1]+'%,'+KUNI_LIGHT[s % KUNI_LIGHT.length]+'%)';
   });
-  return col;
+  return fill;
 })();
 /* ラベル配置：小さい国から順に、文字の60%が国内に収まり、かつ
    先に置いたラベルと重ならない最大サイズを探す（最低5px相当は保証）。
@@ -3212,15 +3229,20 @@ const KLABEL = (()=>{
   return plan;
 })();
 const KUNI_MAPDATA = {geom:KGEOM, key:n=>n, full:n=>n, label:KLABEL, frame:KFULL,
-  fill:n=>PFILL[KCOLOR[n]], main:kuniMain};
-
-/* 五畿七道。KUNI_PACKED は K01～K73 の順で、この区分の順にちょうど並んでいる */
-const GOKI = (()=>{
-  const parts = [['畿内',5],['東海道',15],['東山道',13],['北陸道',7],['山陰道',8],['山陽道',8],['南海道',6],['西海道',11]];
-  const g = {}; let i = 0;
-  parts.forEach(([name,cnt])=>{ g[name] = KUNI_NAMES.slice(i, i+cnt); i += cnt; });
-  return g;
-})();
+  fill:n=>KFILL[n], main:kuniMain};
+/* 五畿七道の色の凡例（地図の下に置く） */
+function kuniLegend(){
+  const d = el('div');
+  d.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px 12px;margin:2px 0 10px;font-size:12px';
+  Object.keys(GOKI).forEach(r=>{
+    const hs = GOKI_HUE[r], s = el('span');
+    s.style.cssText = 'display:inline-flex;align-items:center;gap:4px;white-space:nowrap';
+    s.innerHTML = '<i style="display:inline-block;width:12px;height:12px;border-radius:2px;background:hsl('
+      + hs[0]+','+hs[1]+'%,'+KUNI_LIGHT[1]+'%)"></i>' + r;
+    d.appendChild(s);
+  });
+  return d;
+}
 const KUNI_CREDIT = '旧国境界：人間文化研究機構「幕末明治地勢地図境界データ」（CC BY-NC）を加工して作成';
 const kuniRuby = n => n+'（'+KUNI_YOMI[n]+'）';
 
@@ -3282,6 +3304,7 @@ function screenGeoKuniQuiz(){
 
   const browseMap = buildPrefMap({data:KUNI_MAPDATA, revealed:G.revealed, interactive:true, mode:'browse'});
   w.appendChild(browseMap.wrap);
+  w.appendChild(kuniLegend());
   w.appendChild(cap('国をタップすると名前が表示されます（次の問題で再び隠れます）／この地図は確認用で、解答には使いません'));
 
   w.appendChild(el('p','q-text',q.text));
@@ -3339,6 +3362,7 @@ function kuniFeedback(ok, ex){
   const mb = el('div'); mb.style.marginTop='14px';
   mb.appendChild(el('div','eyebrow','位置を確認（赤い丸＝答え）'));
   mb.appendChild(buildPrefMap({data:KUNI_MAPDATA, mode:'reveal', interactive:false, marks:marks, arrow:arrow}).wrap);
+  mb.appendChild(kuniLegend());
   card.appendChild(mb);
   const btn = el('button','btn', G.i+1>=KUNI_ROUND ? '結果を見る' : '次の問題へ');
   btn.onclick=()=>{ G.i++; nextKuniQ(); };
