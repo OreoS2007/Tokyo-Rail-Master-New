@@ -99,6 +99,7 @@ GitHub Pages（https://oreos2007.github.io/Tokyo-Rail-Master-New/）で公開し
 - 主なコード：`WARD_ADJ`（23区の隣接。手作りのリスト。路線マスターの区の色分けでも使う）、`buildWardMap`、`genGeoQ`
 - 地図の区の色は `WARD_FILL`（8色）。路線マスターの地図とは別
 - 区の形は路線マスターと同じ `WARDS` を使う（共用）
+- クイズ中の確認用の地図（タップで区名が出る。採点には無関係）は、左上の「地図」ボタンで重ねて開く（`openGeoHelpMap`、2026-09-29）。画面上部に常に出すとスクロールが必要でスマホで答えにくかったため。出した区名は同じ問題のあいだ `state.geo.revealed` に残る
 
 ---
 

@@ -111,6 +111,9 @@ vertical-align:middle;margin:0 1px;text-decoration:none}.map-legend u.s{width:4p
 .prog__b i.ok{background:var(--yamanote)}.prog__b i.ng{background:var(--alert)}.prog__b i.now{background:var(--signage)}
 .prog button{flex:none;background:none;border:none;font-family:var(--g);font-size:11px;color:var(--muted);
 cursor:pointer;text-decoration:underline;padding:0}
+.prog .geo-mapbtn{display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--rule);
+border-radius:6px;background:var(--plate);color:var(--ink);font-size:12px;text-decoration:none}
+.geo-mapbtn svg{width:18px;height:18px;display:block}
 .verdict{font-size:17px;font-weight:600;margin-bottom:9px}
 .verdict.ok{color:var(--ok)}.verdict.ng{color:var(--alert)}
 .explain{font-size:13px;line-height:1.85}
@@ -2807,21 +2810,40 @@ function gradeGeo(ok, extra){
   G.ans = true; G.res.push(ok);
   geoFeedback(ok, extra||{});
 }
+/* 確認用の地図（画面に重ねて表示）。区名の確認だけが目的で、タップしても採点には一切影響しない。
+   出した区名は G.revealed に残るので、同じ問題のあいだは開き直しても消えない */
+function openGeoHelpMap(){
+  const G = state.geo;
+  const ov = el('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100;background:rgba(10,18,24,.55);'
+    + 'display:flex;align-items:center;justify-content:center;padding:12px';
+  const box = el('div','card');
+  box.style.cssText = 'max-width:560px;width:100%;max-height:100%;overflow:auto;margin:0;animation:none';
+  box.appendChild(el('div','eyebrow','確認用の地図'));
+  box.appendChild(buildWardMap({revealed:G.revealed, interactive:true, mode:'browse'}).wrap);
+  box.appendChild(cap('区をタップすると名前が表示されます（次の問題で再び隠れます）／この地図は確認用で、解答には使いません'));
+  const close = el('button','btn','閉じる'); close.style.marginTop='10px';
+  close.onclick = ()=>ov.remove();
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  box.appendChild(close); ov.appendChild(box);
+  document.body.appendChild(ov);
+}
 function screenGeoQuiz(){
   const G = state.geo, q = G.q, w = el('div');
   const pr = el('div','prog'), bs = el('div','prog__b');
+  /* 左上の地図ボタン：押したときだけ確認用の地図を重ねて表示する */
+  const mb = el('button','geo-mapbtn');
+  mb.setAttribute('aria-label','確認用の地図を開く');
+  mb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">'
+    + '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>地図';
+  mb.onclick = openGeoHelpMap;
+  pr.appendChild(mb);
   for(let i=0;i<GEO_ROUND;i++) bs.appendChild(el('i', i<G.res.length ? (G.res[i]?'ok':'ng') : (i===G.i?'now':'')));
   pr.appendChild(bs);
   const ab = el('button', null, 'やめる');
   ab.onclick=()=>render('geoTokyo');
   pr.appendChild(ab);
   w.appendChild(pr);
-
-  /* 閲覧用の地図：区名の確認だけが目的で、問題の種類に関係なく必ず表示する。
-     タップしても採点には一切影響しない。 */
-  const browseMap = buildWardMap({revealed:G.revealed, interactive:true, mode:'browse'});
-  w.appendChild(browseMap.wrap);
-  w.appendChild(cap('区をタップすると名前が表示されます（次の問題で再び隠れます）／この地図は確認用で、解答には使いません'));
 
   w.appendChild(el('p','q-text',q.text));
 
