@@ -2837,21 +2837,34 @@ function openGeoHelpMap(){
   map.wrap.style.maxWidth = 'max(260px, calc((100vh - 210px) / '+(FULL[3]/FULL[2]).toFixed(3)+'))';
   box.appendChild(map.wrap);
   box.appendChild(cap('区をタップすると名前が表示されます（次の問題で再び隠れます）／この地図は確認用で、解答には使いません'));
-  /* 開くときはふわっと浮かび上がり、閉じるときは沈みながら消える */
+  /* 開くときは左上の地図ボタンから広がり、閉じるときは地図ボタンに向かって縮んでいく */
   const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const T = still ? 0 : 220;
-  const FADE = [{opacity:0},{opacity:1}];
-  const RISE = [{transform:'translateY(18px) scale(.96)'},{transform:'none'}];
+  const T_OPEN = still ? 0 : 300, T_CLOSE = still ? 0 : 240;
+  /* 地図ボタンの位置・大きさに重なる形（毎回その時の位置から計算する） */
+  const atButton = ()=>{
+    const b = document.querySelector('.geo-mapbtn'), r = box.getBoundingClientRect();
+    if(!b || !r.width) return 'scale(.9)';
+    const a = b.getBoundingClientRect();
+    const dx = (a.left+a.width/2) - (r.left+r.width/2), dy = (a.top+a.height/2) - (r.top+r.height/2);
+    const s = Math.max(a.width/r.width, a.height/r.height);
+    return 'translate('+dx.toFixed(1)+'px,'+dy.toFixed(1)+'px) scale('+s.toFixed(3)+')';
+  };
   const play = open=>{
-    const opt = open ? {duration:T, easing:'cubic-bezier(.2,.8,.3,1)', fill:'both'}
-                     : {duration:T*.8, easing:'ease', fill:'both'};
-    const rv = a=>open ? a : a.slice().reverse();
-    ov.animate(rv(FADE), opt); box.animate(rv(RISE), opt);
+    const small = atButton();
+    if(open){
+      ov.animate([{opacity:0},{opacity:1}], {duration:T_OPEN, easing:'ease-out', fill:'both'});
+      box.animate([{transform:small, opacity:0},{opacity:1, offset:.3},{transform:'none', opacity:1}],
+        {duration:T_OPEN, easing:'cubic-bezier(.2,.8,.3,1)', fill:'both'});
+    } else {
+      ov.animate([{opacity:1},{opacity:0}], {duration:T_CLOSE, easing:'ease-in', fill:'both'});
+      box.animate([{transform:'none', opacity:1},{opacity:1, offset:.7},{transform:small, opacity:0}],
+        {duration:T_CLOSE, easing:'cubic-bezier(.5,0,.75,.3)', fill:'both'});
+    }
   };
   let closing = false;
   const shut = ()=>{
     if(closing) return; closing = true;
-    play(false); setTimeout(()=>ov.remove(), T*.8);
+    play(false); setTimeout(()=>ov.remove(), T_CLOSE);
   };
   const close = el('button','btn','閉じる'); close.style.marginTop='10px';
   close.onclick = shut;

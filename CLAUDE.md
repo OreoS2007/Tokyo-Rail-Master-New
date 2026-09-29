@@ -102,7 +102,8 @@ GitHub Pages（https://oreos2007.github.io/Tokyo-Rail-Master-New/）で公開し
 - クイズ中の確認用の地図（タップで区名が出る。採点には無関係）は、左上の「地図」ボタンで重ねて開く（`openGeoHelpMap`、2026-09-29）。画面上部に常に出すとスクロールが必要でスマホで答えにくかったため。出した区名は同じ問題のあいだ `state.geo.revealed` に残る
   - 地図ボタンの行（`.geo-prog`）は画面上部に固定。解答後の解説カードも同じ入れ物に入れないと固定が外れる（`geoFeedback`）
   - 確認用の地図の区名は画面上で約13px（表示幅から換算するので、地図を画面に出してから `showLabel` で描く）
-  - 開閉のアニメーションは `element.animate()`（CSS の transition は閉じるときに動かないことがあった）
+  - 開閉のアニメーションは `element.animate()`（CSS の transition は閉じるときに動かないことがあった）。地図ボタンの位置から広がり、地図ボタンに向かって縮む（`atButton` がその時のボタン位置から計算）
+  - 確認用ブラウザが裏に回っている・非表示のときはアニメーションが進まない。確かめるときは `getAnimations()` で止めて `currentTime` を動かして測る
 
 ---
 
