@@ -1485,7 +1485,7 @@ function screenCheck(){
   const ab=el('button',null,'やめる');ab.onclick=()=>render('line',{li:C.li});pr.appendChild(ab);
   w.appendChild(pr);
   const c=el('div','card');
-  /* 左上の地図ボタン：解説と同じ地図を、駅名を伏せて出す（駅を押すと名前が出る） */
+  /* 左上の地図ボタン：解説と同じ範囲の地図を、駅名を伏せ、強調なしで出す（駅を押すと名前が出る） */
   const head=el('div');head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:10px';
   const mapBtn=el('button',null,'🗺');
   mapBtn.setAttribute('aria-label','地図を表示');mapBtn.title='地図を表示（駅名は伏せてあります）';
@@ -1497,8 +1497,9 @@ function screenCheck(){
   mapBtn.onclick=()=>{
     const open=hint.style.display==='none';
     if(open&&!hint.firstChild){
-      const ids=checkFocus(q,C);
-      hint.appendChild(miniMap(ids,ids.map(i=>({idx:i,kind:'right'})),null,C.li,null,{hideNames:true}));
+      /* 表示範囲は解説と同じ（checkFocus の駅と前後1駅）。答えが分からないよう駅の強調はせず、
+         この路線の駅をすべて同じ見た目で出す */
+      hint.appendChild(miniMap(checkFocus(q,C),[],null,C.li,null,{hideNames:true,focusLine:C.li}));
       hint.appendChild(cap('駅名は伏せてあります。駅を押すと名前が出ます'));
     }
     hint.style.display=open?'block':'none';
