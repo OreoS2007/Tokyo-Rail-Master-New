@@ -2185,19 +2185,26 @@ function screenStudy(){
   const b=el('button','btn btn--gh','設定に戻る');b.onclick=()=>render('home');w.appendChild(b);
   return w;
 }
-/* used：この回にすでに出した駅（同じ駅を続けて出さないため） */
-const newSession=()=>({i:0,res:[],q:null,ans:false,used:new Set()});
+/* used：この回にすでに出した駅（同じ駅を続けて出さないため）
+   wrong：間違えた問題（結果画面の「間違えた問題だけもう一度」用）
+   fixed：出す問題が決まっているとき（やり直し）。n はこの回の問題数 */
+const newSession=fixed=>({i:0,res:[],q:null,ans:false,used:new Set(),wrong:[],
+  fixed:fixed||null,n:fixed?fixed.length:ROUND});
 function startSession(){state.session=newSession();state.t0=Date.now();next()}
+function startRetry(qs){state.session=newSession(qs.slice());state.t0=Date.now();next()}
 function stopTimer(){if(state.t0){const d=Date.now()-state.t0;
   if(d<40*60000){state.progress.stats=state.progress.stats||{byLine:{},byMode:{},byStation:{},days:{},bestStreak:0,ms:0};
     state.progress.stats.ms=(state.progress.stats.ms||0)+d}
   state.t0=0}}
-function next(){const s=state.session;if(s.i>=ROUND){finish();return}
-  let q=null,g=0;do{q=GEN[pick(state.modes)]();g++}while(!q&&g<20);
+function next(){const s=state.session;if(s.i>=s.n){finish();return}
+  let q=null,g=0;
+  if(s.fixed){q=s.fixed[s.i];if(q.options)q.options=shuffle(q.options)}   // 選択肢の位置は並べ直す
+  else do{q=GEN[pick(state.modes)]();g++}while(!q&&g<20);
   s.q=q;s.ans=false;render('quiz')}
 function grade(ok,ex){const s=state.session;if(s.ans)return;
   s.ans=true;s.res.push(ok);state.progress.totalQ++;if(ok)state.progress.totalOK++;
   const q=s.q;
+  if(!ok)s.wrong.push(q);
   let li=null,sti=null;
   if(q.line!=null)li=q.line;
   else if(q.mode==='route'&&q.r&&q.r.legs.length)li=q.r.legs[0].line;
@@ -2210,7 +2217,10 @@ function grade(ok,ex){const s=state.session;if(s.ans)return;
   if(sti!=null&&s.used)s.used.add(sti);
   recordAnswer(ok,{line:li,mode:q.mode,st:sti});
   touch();fb(ok,ex||{})}
-async function finish(){const s=state.session,ok=s.res.filter(Boolean).length,pct=Math.round(ok/ROUND*100);
+async function finish(){const s=state.session,ok=s.res.filter(Boolean).length,pct=Math.round(ok/s.n*100);
+  /* やり直し（間違えた問題だけ）は、クリアや最高記録には数えない */
+  if(s.fixed){stopTimer();touch();state.session=null;
+    render('result',{ok:ok,n:s.n,pct:pct,li:state.quizLine,diff:state.diff,retry:true,wrong:s.wrong});return}
   if(pct>(state.progress.best[state.level]||0))state.progress.best[state.level]=pct;
   let newly=null,li=state.quizLine;
   /* レベルが開くのは clearLine の中だけ（そのレベルの路線の半数をクリアしたとき）。
@@ -2218,13 +2228,13 @@ async function finish(){const s=state.session,ok=s.res.filter(Boolean).length,pc
   if(pct>=50&&li!=null)newly=clearLine(li,state.diff);
   stopTimer();touch();
   state.session=null; // 終わったクイズを「進行中」のまま残さない
-  render('result',{ok:ok,pct:pct,li:li,diff:state.diff,newly:newly,mix:state.mixMode})}
+  render('result',{ok:ok,n:s.n,pct:pct,li:li,diff:state.diff,newly:newly,mix:state.mixMode,wrong:s.wrong})}
 function abort(){stopTimer();state.session=null;render('home')}
 
 function screenQuiz(){
   const s=state.session,q=s.q,w=el('div');
   const pr=el('div','prog'),bs=el('div','prog__b');
-  for(let i=0;i<ROUND;i++)bs.appendChild(el('i',i<s.res.length?(s.res[i]?'ok':'ng'):(i===s.i?'now':'')));
+  for(let i=0;i<s.n;i++)bs.appendChild(el('i',i<s.res.length?(s.res[i]?'ok':'ng'):(i===s.i?'now':'')));
   pr.appendChild(bs);const ab=el('button',null,'中断する');ab.onclick=abort;pr.appendChild(ab);
   w.appendChild(pr);w.appendChild(q.plate);w.appendChild(el('p','q-text',q.text));
   const area=el('div');area.id='ans';w.appendChild(area);
@@ -2387,7 +2397,7 @@ function fb(ok,ex){
   mb.appendChild(miniMap(uq,marks,legs,fline,hlWard));
   mb.appendChild(cap(hlWard?('白抜きが今回の駅／緑の範囲が'+hlWard):'白抜きが今回の問題の駅／前後1駅まで表示'));
   card.appendChild(mb);
-  const btn=el('button','btn',state.session.i+1>=ROUND?'結果を見る':'次の問題へ');
+  const btn=el('button','btn',state.session.i+1>=state.session.n?'結果を見る':'次の問題へ');
   btn.onclick=()=>{state.session.i++;next()};card.appendChild(btn);
   const ab=el('button','btn btn--gh btn--sm','中断してホームに戻る');
   ab.style.marginTop='8px';ab.onclick=abort;card.appendChild(ab);
@@ -2395,10 +2405,13 @@ function fb(ok,ex){
 }
 function screenResult(d){
   const w=el('div'),c=el('div','card');
-  c.appendChild(el('div','eyebrow','Result — '+(d.li!=null?LINES[d.li].ja:'総合クイズ')+' / '+DIFF[d.diff].l));
-  c.innerHTML+='<div class="score">'+d.ok+'<small> / '+ROUND+'　正答率 '+d.pct+'%</small></div>';
+  c.appendChild(el('div','eyebrow','Result — '+(d.li!=null?LINES[d.li].ja:'総合クイズ')+' / '+DIFF[d.diff].l
+    +(d.retry?'（やり直し）':'')));
+  c.innerHTML+='<div class="score">'+d.ok+'<small> / '+d.n+'　正答率 '+d.pct+'%</small></div>';
   const m=el('p','hint');m.style.marginTop='12px';
-  if(d.li==null){
+  if(d.retry){
+    m.innerHTML=d.wrong.length?'まだ間違えた問題が '+d.wrong.length+' 問あります。':'<b>間違えた問題をすべて解けました。</b>';
+  }else if(d.li==null){
     m.innerHTML='総合クイズは路線のクリアやレベル解放には数えません。';
   }else if(d.pct>=50){
     const lv=openLevel();
@@ -2411,7 +2424,12 @@ function screenResult(d){
     m.innerHTML='クリアの条件は正答率50%です。難易度を下げるか、学習モードで予習してから再挑戦を。';
   }
   c.appendChild(m);w.appendChild(c);
-  const b1=el('button','btn','もう一度（同じ設定）');b1.onclick=startSession;w.appendChild(b1);
+  if(d.wrong&&d.wrong.length){
+    const b0=el('button','btn','間違えた問題だけもう一度（'+d.wrong.length+'問）');
+    b0.onclick=()=>startRetry(d.wrong);w.appendChild(b0);
+  }
+  const b1=el('button','btn'+(d.wrong&&d.wrong.length?' btn--gh':''),d.retry?'新しい10問に挑戦（同じ設定）':'もう一度（同じ設定）');
+  b1.style.marginTop='10px';b1.onclick=startSession;w.appendChild(b1);
   const b2=el('button','btn btn--gh','設定を変える');b2.style.marginTop='10px';
   b2.onclick=()=>render('home');w.appendChild(b2);return w;
 }
