@@ -1075,6 +1075,8 @@ function genQuiz(){
 }
 function genRoute(){
   const ps=poolIdx(),al=activeLines();
+  /* 路線が1本だけ（路線ごとのクイズ）だと答えが必ずその路線になり、選択肢も1つしか作れないので出さない */
+  if(al.size<2)return genQuiz();
   let a,b,r,g=0;
   do{a=pick(ps);b=pick(ps);r=(a!==b)?route(a,b,al):null;g++}
   while((!r||r.hops<3)&&g<60);
@@ -1084,6 +1086,11 @@ function genRoute(){
   const at=ST[a].lines.filter(l=>al.has(l)&&l!==first);
   const opts=shuffle([first].concat(shuffle(at).slice(0,2)).concat(shuffle(others).slice(0,3))).slice(0,4);
   if(opts.indexOf(first)<0)opts[0]=first;
+  /* 選んだ路線が少なくて4つに満たないときは、出発駅を通らないほかの路線で補う */
+  if(opts.length<4){
+    const extra=shuffle(LINES.map(L=>L.i).filter(l=>opts.indexOf(l)<0&&ST[a].lines.indexOf(l)<0));
+    while(opts.length<4&&extra.length)opts.push(extra.shift());
+  }
   return{mode:'route',from:a,to:b,r:r,answer:first,options:shuffle(opts),optType:'line',
     plate:plate(ST[a],{right:'?'}),
     text:ST[a].ja+' から '+ST[b].ja+' へ。まず何線に乗る？'};
@@ -2171,10 +2178,9 @@ function grade(ok,ex){const s=state.session;if(s.ans)return;
 async function finish(){const s=state.session,ok=s.res.filter(Boolean).length,pct=Math.round(ok/ROUND*100);
   if(pct>(state.progress.best[state.level]||0))state.progress.best[state.level]=pct;
   let newly=null,li=state.quizLine;
-  if(pct>=50){
-    if(li!=null)newly=clearLine(li,state.diff);
-    if(state.progress.unlocked<=state.level)state.progress.unlocked=Math.min(4,state.level+1);
-  }
+  /* レベルが開くのは clearLine の中だけ（そのレベルの路線の半数をクリアしたとき）。
+     以前はここで1回50%を取るだけで次のレベルを開けていた */
+  if(pct>=50&&li!=null)newly=clearLine(li,state.diff);
   stopTimer();touch();
   state.session=null; // 終わったクイズを「進行中」のまま残さない
   render('result',{ok:ok,pct:pct,li:li,diff:state.diff,newly:newly,mix:state.mixMode})}
@@ -2354,11 +2360,21 @@ function fb(ok,ex){
 }
 function screenResult(d){
   const w=el('div'),c=el('div','card');
-  c.appendChild(el('div','eyebrow','Result — Lv.'+state.level+' / '+DIFF[state.diff].l));
+  c.appendChild(el('div','eyebrow','Result — '+(d.li!=null?LINES[d.li].ja:'総合クイズ')+' / '+DIFF[d.diff].l));
   c.innerHTML+='<div class="score">'+d.ok+'<small> / '+ROUND+'　正答率 '+d.pct+'%</small></div>';
   const m=el('p','hint');m.style.marginTop='12px';
-  m.innerHTML=d.pct>=50?(state.level<4?'<b>Lv.'+(state.level+1)+' が解放されました。</b>':'全レベル達成です。')
-    :'解放条件は正答率50%です。難易度を下げるか、路線を絞るか、路線図で予習してから再挑戦を。';
+  if(d.li==null){
+    m.innerHTML='総合クイズは路線のクリアやレベル解放には数えません。';
+  }else if(d.pct>=50){
+    const lv=openLevel();
+    let t='<b>'+LINES[d.li].ja+' を「'+DIFF[d.diff].l+'」でクリアしました。</b>';
+    if(d.newly)t+='<br><b>Lv.'+d.newly+' が解放されました。</b>';
+    else if(lv<4)t+='<br>Lv.'+lv+' の路線をあと '+Math.max(0,needToAdvance(lv)-clearedInLevel(lv))
+      +' 路線クリアすると Lv.'+(lv+1)+' が開きます。';
+    m.innerHTML=t;
+  }else{
+    m.innerHTML='クリアの条件は正答率50%です。難易度を下げるか、学習モードで予習してから再挑戦を。';
+  }
   c.appendChild(m);w.appendChild(c);
   const b1=el('button','btn','もう一度（同じ設定）');b1.onclick=startSession;w.appendChild(b1);
   const b2=el('button','btn btn--gh','設定を変える');b2.style.marginTop='10px';
