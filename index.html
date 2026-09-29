@@ -1032,29 +1032,53 @@ function plate(s,o){
 const row=(m,n,note,ic)=>'<div class="row"><span class="mk '+m+'">'+(m==='r'?'○':'×')+'</span>'
   +(ic?icon(ic,'ic-sm'):'')+'<span><b>'+n+'</b>　'+note+'</span></div>';
 const lineOf=i=>{const al=activeLines();return ST[i].lines.filter(l=>al.has(l))};
-function genMap(){const t=pick(pool());
+/* 出題する駅の選び方：まだ出ていない駅・間違えた駅・しばらく出ていない駅を優先する。
+   1回のクイズの中では同じ駅を出さない（候補が足りないときだけ重複を許す）。
+   記録は stats.byStation[駅]=[出題数,正解数,最後に出た時刻,最後に正解したら1] */
+function stWeight(i,now){
+  const s=state.progress.stats,t=s&&s.byStation&&s.byStation[i];
+  if(!t||!t[0])return 4;
+  let w=1+4*(t[0]-t[1])/t[0];
+  if(t[3]===0)w+=4;
+  if(t[2]){
+    w+=Math.min(3,(now-t[2])/DAY/2);
+    if(t[3]===1&&now-t[2]<10*60000)w*=0.3;
+  }else w+=1.5;
+  return w;
+}
+function wPick(cands){
+  const used=state.session&&state.session.used;
+  let c=used?cands.filter(i=>!used.has(i)):cands.slice();
+  if(!c.length)c=cands.slice();
+  const now=Date.now(),ws=c.map(i=>stWeight(i,now));
+  let r=Math.random()*ws.reduce((a,b)=>a+b,0);
+  for(let k=0;k<c.length;k++){r-=ws[k];if(r<=0)return c[k]}
+  return c[c.length-1];
+}
+function genMap(){const t=ST[wPick(poolIdx())];
   return{mode:'map',target:t.i,plate:plate(t),text:'この駅は地図のどこ？　丸をタップしてください。'}}
 function genQuiz(){
   const ps=poolIdx(),al=[...activeLines()];
   const kinds=al.length>1?['line','next','ward','near']:['next','ward','near'];
   const k=pick(kinds), o4=(c,from)=>shuffle([c].concat(shuffle(from.filter(x=>x!==c)).slice(0,3)));
   if(k==='line'){
-    const i=pick(ps),ls=lineOf(i);if(!ls.length)return genQuiz();
+    const i=wPick(ps),ls=lineOf(i);if(!ls.length)return genQuiz();
     const ans=pick(ls),others=al.filter(l=>ST[i].lines.indexOf(l)<0);
     if(others.length<3)return genQuiz();
     return{mode:'quiz',kind:k,subject:i,answer:ans,options:o4(ans,others),optType:'line',
       plate:plate(ST[i],{}),text:ST[i].ja+'駅を通っている路線はどれ？'};
   }
   if(k==='ward'){
-    const i=pick(ps),ws=[...new Set(ST.filter(s=>s.level<=state.level).map(s=>s.ward))];
+    const i=wPick(ps),ws=[...new Set(ST.filter(s=>s.level<=state.level).map(s=>s.ward))];
     if(ws.length<4)return genQuiz();
     return{mode:'quiz',kind:k,subject:i,answer:ST[i].ward,options:o4(ST[i].ward,ws),optType:'ward',
       plate:plate(ST[i],{blank:false}),text:ST[i].ja+'駅があるのは何区？'};
   }
   if(k==='next'){
-    const cands=LINES.filter(L=>activeLines().has(L.i)&&L.st.length>3);
-    if(!cands.length)return genQuiz();
-    const L=pick(cands),n=L.st.length,at=Math.floor(Math.random()*n);
+    const cs=new Set(LINES.filter(L=>activeLines().has(L.i)&&L.st.length>3).map(L=>L.i));
+    const subs=ps.filter(i=>ST[i].lines.some(l=>cs.has(l)));
+    if(!subs.length)return genQuiz();
+    const s0=wPick(subs),L=LINES[pick(ST[s0].lines.filter(l=>cs.has(l)))],n=L.st.length,at=L.st.indexOf(s0);
     const dir=pick([1,-1]);let nx=at+dir;
     if(L.loop)nx=(nx+n)%n; else if(nx<0||nx>=n)nx=at-dir;
     if(nx===at)return genQuiz();
@@ -1065,7 +1089,7 @@ function genQuiz(){
       plate:plate(ST[sub],dir>0?{right:'?'}:{left:'?'}),
       text:L.ja+'で '+ST[sub].ja+' の'+(dir>0?'次':'ひとつ前')+'の駅は？'};
   }
-  const b=pick(ps),cs=shuffle(ps.filter(x=>x!==b)).slice(0,4);
+  const b=wPick(ps),cs=shuffle(ps.filter(x=>x!==b)).slice(0,4);
   const al2=activeLines();
   const hs=cs.map(x=>({x:x,h:hopsOf(b,x,al2)}));
   hs.sort((p,q)=>p.h-q.h);
@@ -1077,9 +1101,14 @@ function genRoute(){
   const ps=poolIdx(),al=activeLines();
   /* 路線が1本だけ（路線ごとのクイズ）だと答えが必ずその路線になり、選択肢も1つしか作れないので出さない */
   if(al.size<2)return genQuiz();
-  let a,b,r,g=0;
-  do{a=pick(ps);b=pick(ps);r=(a!==b)?route(a,b,al):null;g++}
-  while((!r||r.hops<3)&&g<60);
+  /* 出発駅を優先度で選び、行き先はランダム。うまく作れなければ出発駅もランダムにする */
+  let a=wPick(ps),b,r,g=0;
+  do{b=pick(ps);r=(a!==b)?route(a,b,al):null;g++}
+  while((!r||r.hops<3)&&g<40);
+  if(!r||r.hops<3){g=0;
+    do{a=pick(ps);b=pick(ps);r=(a!==b)?route(a,b,al):null;g++}
+    while((!r||r.hops<3)&&g<60);
+  }
   if(!r)return genQuiz();
   const first=r.legs[0].line;
   const others=[...al].filter(l=>l!==first&&ST[a].lines.indexOf(l)<0);
@@ -1098,7 +1127,7 @@ function genRoute(){
 function genSpot(){
   const ps=pool().filter(s=>s.spots.length);
   if(ps.length<4)return genQuiz();
-  const dir=pick(['toSpot','toStation']),s=pick(ps),sp=pick(s.spots);
+  const dir=pick(['toSpot','toStation']),s=ST[wPick(ps.map(x=>x.i))],sp=pick(s.spots);
   if(dir==='toSpot'){
     /* 同じ名所が複数駅の近くに登録されていることがある（例:明治神宮）ので、
        名前で重複排除し、正解と同名の候補も除外する */
@@ -1564,6 +1593,7 @@ function recordAnswer(ok,ctx){
   if(ctx&&ctx.st!=null){
     const t=s.byStation[ctx.st]=s.byStation[ctx.st]||[0,0];
     t[0]++; if(ok)t[1]++;
+    t[2]=Date.now(); t[3]=ok?1:0;   // 出題の優先度（stWeight）に使う
   }
   if(ok){s.streak++;if(s.streak>s.bestStreak)s.bestStreak=s.streak}else s.streak=0;
 }
@@ -1818,7 +1848,7 @@ function startLineSession(li){
   state.quizLine=li; state.mixMode=false;
   state.off={}; LINES.forEach(L=>{if(L.i!==li)state.off[L.i]=1});
   state.level=Math.max(state.level,LINES[li].level);
-  state.session={i:0,res:[],q:null,ans:false};state.t0=Date.now();next();
+  state.session=newSession();state.t0=Date.now();next();
 }
 
 /* ===== 総合クイズ ===== */
@@ -1914,7 +1944,7 @@ function startMixSession(sel){
   state.quizLine=null; state.mixMode=true;
   state.off={}; LINES.forEach(L=>{if(sel.indexOf(L.i)<0)state.off[L.i]=1});
   state.level=4;
-  state.session={i:0,res:[],q:null,ans:false};state.t0=Date.now();next();
+  state.session=newSession();state.t0=Date.now();next();
 }
 
 /* ===== ホーム：入口だけを見せる ===== */
@@ -2155,7 +2185,9 @@ function screenStudy(){
   const b=el('button','btn btn--gh','設定に戻る');b.onclick=()=>render('home');w.appendChild(b);
   return w;
 }
-function startSession(){state.session={i:0,res:[],q:null,ans:false};state.t0=Date.now();next()}
+/* used：この回にすでに出した駅（同じ駅を続けて出さないため） */
+const newSession=()=>({i:0,res:[],q:null,ans:false,used:new Set()});
+function startSession(){state.session=newSession();state.t0=Date.now();next()}
 function stopTimer(){if(state.t0){const d=Date.now()-state.t0;
   if(d<40*60000){state.progress.stats=state.progress.stats||{byLine:{},byMode:{},byStation:{},days:{},bestStreak:0,ms:0};
     state.progress.stats.ms=(state.progress.stats.ms||0)+d}
@@ -2171,8 +2203,11 @@ function grade(ok,ex){const s=state.session;if(s.ans)return;
   else if(q.mode==='route'&&q.r&&q.r.legs.length)li=q.r.legs[0].line;
   else{const t=(q.target!=null?q.target:(q.subject!=null?q.subject:(q.station!=null?q.station:q.answer)));
     if(typeof t==='number'&&ST[t]&&ST[t].lines.length)li=ST[t].lines[0]}
-  const t2=(q.target!=null?q.target:(q.subject!=null?q.subject:(q.station!=null?q.station:q.answer)));
+  /* 経路問題の answer は路線番号なので、駅としては出発駅を記録する */
+  const t2=q.mode==='route'?q.from
+    :(q.target!=null?q.target:(q.subject!=null?q.subject:(q.station!=null?q.station:q.answer)));
   if(typeof t2==='number'&&ST[t2])sti=t2;
+  if(sti!=null&&s.used)s.used.add(sti);
   recordAnswer(ok,{line:li,mode:q.mode,st:sti});
   touch();fb(ok,ex||{})}
 async function finish(){const s=state.session,ok=s.res.filter(Boolean).length,pct=Math.round(ok/ROUND*100);
