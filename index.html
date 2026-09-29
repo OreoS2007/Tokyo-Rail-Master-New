@@ -114,6 +114,7 @@ cursor:pointer;text-decoration:underline;padding:0}
 .prog .geo-mapbtn{display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--rule);
 border-radius:6px;background:var(--plate);color:var(--ink);font-size:12px;text-decoration:none}
 .geo-mapbtn svg{width:18px;height:18px;display:block}
+.prog.geo-prog{position:sticky;top:0;z-index:30;background:var(--paper);padding:10px 0;margin:-10px 0 6px}
 .verdict{font-size:17px;font-weight:600;margin-bottom:9px}
 .verdict.ok{color:var(--ok)}.verdict.ng{color:var(--alert)}
 .explain{font-size:13px;line-height:1.85}
@@ -2745,10 +2746,21 @@ function buildWardMap(o){
   /* bare（「区」を含まない名前）で統一して扱う */
   function drawLabel(bare){
     if(drawn[bare]) return;
+    /* 確認用（browse）は、画面上で読める大きさ（約13px）にそろえる。
+       地図の表示幅が分からない（まだ画面に出ていない）ときは描かない。
+       画面に出したあとで、返り値の showLabel で描く */
+    let fs = wardFontSize(bare), sw = null;
+    if(o.mode==='browse'){
+      const cw = svg.clientWidth;
+      if(!cw) return;
+      const k = view[2]/cw;
+      fs = 13*k; sw = 3*k;
+    }
     drawn[bare] = true;
     const b = wardBounds(bare);
     const t = tx(b.cx, b.cy, 'geo-wardname', bare+'区');
-    t.setAttribute('font-size', wardFontSize(bare).toFixed(1)+'px');
+    t.setAttribute('font-size', fs.toFixed(1)+'px');
+    if(sw) t.style.strokeWidth = sw.toFixed(2)+'px';
     svg.appendChild(t);
   }
   for(const k in WARDS){
@@ -2769,7 +2781,7 @@ function buildWardMap(o){
       }
     });
   }
-  return {wrap:wrap, svg:svg};
+  return {wrap:wrap, svg:svg, showLabel:drawLabel};
 }
 
 /* ---------- クイズ本体 ---------- */
@@ -2820,18 +2832,39 @@ function openGeoHelpMap(){
   const box = el('div','card');
   box.style.cssText = 'max-width:560px;width:100%;max-height:100%;overflow:auto;margin:0;animation:none';
   box.appendChild(el('div','eyebrow','確認用の地図'));
-  box.appendChild(buildWardMap({revealed:G.revealed, interactive:true, mode:'browse'}).wrap);
+  const map = buildWardMap({revealed:G.revealed, interactive:true, mode:'browse'});
+  /* 横長・背の低い画面でも「閉じる」まで一度に収まるよう、地図の幅を画面の高さで抑える */
+  map.wrap.style.maxWidth = 'max(260px, calc((100vh - 210px) / '+(FULL[3]/FULL[2]).toFixed(3)+'))';
+  box.appendChild(map.wrap);
   box.appendChild(cap('区をタップすると名前が表示されます（次の問題で再び隠れます）／この地図は確認用で、解答には使いません'));
+  /* 開くときはふわっと浮かび上がり、閉じるときは沈みながら消える */
+  const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const T = still ? 0 : 220;
+  const FADE = [{opacity:0},{opacity:1}];
+  const RISE = [{transform:'translateY(18px) scale(.96)'},{transform:'none'}];
+  const play = open=>{
+    const opt = open ? {duration:T, easing:'cubic-bezier(.2,.8,.3,1)', fill:'both'}
+                     : {duration:T*.8, easing:'ease', fill:'both'};
+    const rv = a=>open ? a : a.slice().reverse();
+    ov.animate(rv(FADE), opt); box.animate(rv(RISE), opt);
+  };
+  let closing = false;
+  const shut = ()=>{
+    if(closing) return; closing = true;
+    play(false); setTimeout(()=>ov.remove(), T*.8);
+  };
   const close = el('button','btn','閉じる'); close.style.marginTop='10px';
-  close.onclick = ()=>ov.remove();
-  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  close.onclick = shut;
+  ov.onclick = e=>{ if(e.target===ov) shut(); };
   box.appendChild(close); ov.appendChild(box);
   document.body.appendChild(ov);
+  G.revealed.forEach(b=>map.showLabel(b));  // 画面に出てから描く（文字の大きさを表示幅から決めるため）
+  play(true);
 }
 function screenGeoQuiz(){
   const G = state.geo, q = G.q, w = el('div');
-  const pr = el('div','prog'), bs = el('div','prog__b');
-  /* 左上の地図ボタン：押したときだけ確認用の地図を重ねて表示する */
+  const pr = el('div','prog geo-prog'), bs = el('div','prog__b');
+  /* 左上の地図ボタン（この行ごと画面上部に固定し、スクロールしても押せるようにする）：押したときだけ確認用の地図を重ねて表示する */
   const mb = el('button','geo-mapbtn');
   mb.setAttribute('aria-label','確認用の地図を開く');
   mb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">'
@@ -2897,7 +2930,9 @@ function geoFeedback(ok, ex){
   const btn = el('button','btn', G.i+1>=GEO_ROUND ? '結果を見る' : '次の問題へ');
   btn.onclick=()=>{ G.i++; nextGeoQ(); };
   card.appendChild(btn);
-  $('#screen').appendChild(card);
+  /* 上部に固定した地図ボタンの行と同じ入れ物に入れる（別にすると、ここまでスクロールしたとき固定が外れる） */
+  const host = $('#screen .geo-prog');
+  (host ? host.parentNode : $('#screen')).appendChild(card);
   card.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function screenGeoResult(d){
