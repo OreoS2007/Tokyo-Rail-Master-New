@@ -628,6 +628,7 @@ function applyAccount(rec){
   state.qLevel=null;state.qLine=null;state.mixOff={};
   state.review=null;state.check=null;
   state.progress.study=state.progress.study||{};
+  migrateStudy(state.progress);
   state.level=state.admin?(rec.level||1):Math.min(rec.level||1,state.progress.unlocked);
   state.diff=rec.diff||'normal';state.off={};state.dirty=false;
 }
@@ -684,6 +685,7 @@ async function getAccounts(){
   try{const r=await STORE.get(AKEY);return r&&r.value?JSON.parse(r.value):{}}catch(e){return {}}
 }
 async function putAccounts(a){try{await STORE.set(AKEY,JSON.stringify(a))}catch(e){}}
+/* stageDone・srs はここに入れない（古い記録と合わせたときに引き継ぎ済みと誤判定するため）。migrateStudy が作る */
 function blankProgress(){return{unlocked:1,totalQ:0,totalOK:0,best:{},study:{},clear:{},unlockedLines:[]}}
 
 /* 管理者判定：平文は保存せず、ハッシュ値の一致だけで判定する */
@@ -694,44 +696,102 @@ const isAdminCred=(name,hash)=>name===ADMIN_NAME&&ADMIN_HASH.indexOf(hash)>=0;
 /* ===== 復習（間隔反復） ===== */
 const REVIEW_DAYS=[1,3,7,16,35,90];
 const DAY=86400000;
+/* 記録は2種類（2026-09-29 に作り直し）
+   progress.stageDone["路線:区間番号"]=合格した時刻 …… 区間に合格したか（進み具合の表示用）
+   progress.srs["路線:駅"]={n,last,next} …………… 復習の予定は駅ごとに1つ。どの区間で合格しても同じ記録を更新する
+   復習は「重ならない区間」の単位で出す（全線通しの区間は復習に出さない）ので、同じ駅を二重に復習しない */
+const srsKey=(li,g)=>li+':'+g;
+const stRange=(li,si)=>{const L=LINES[li],r=stagesOf(L)[si];return r?L.st.slice(r[0],r[1]):[]};
+const isFullStage=(li,si)=>{const L=LINES[li],r=stagesOf(L)[si];return !!r&&stagesOf(L).length>1&&r[0]===0&&r[1]===L.st.length};
+/* 区間の駅の記録をまとめたもの（いちばん早い復習日・いちばん低い段階）。記録がなければ null */
 function stRec(li,si){
-  const v=state.progress.study&&state.progress.study[stKey(li,si)];
-  if(!v)return null;
-  if(v===1||v===true)return{n:0,last:Date.now(),next:Date.now()+REVIEW_DAYS[0]*DAY};
-  return v;
+  const s=state.progress.srs||{};let n=99,next=Infinity,any=false;
+  stRange(li,si).forEach(g=>{const v=s[srsKey(li,g)];if(v){any=true;n=Math.min(n,v.n);next=Math.min(next,v.next)}});
+  return any?{n:n,next:next}:null;
 }
 function markCleared(li,si,ok){
-  state.progress.study=state.progress.study||{};
-  const cur=stRec(li,si);
-  let n=cur?cur.n:0;
-  n=ok?Math.min(REVIEW_DAYS.length-1,n+(cur?1:0)):0;
-  state.progress.study[stKey(li,si)]={n:n,last:Date.now(),next:Date.now()+REVIEW_DAYS[n]*DAY};
-  /* この区間をクリアしたら、それに完全に含まれる小区間もクリア済みにする
-     （24駅クリア→内包する6駅・12駅の区間も達成扱い）。すでに記録がある区間は上書きしない */
-  if(ok){
-    const L=LINES[li],sg=stagesOf(L),range=sg[si];
-    if(range){
-      sg.forEach((r,cj)=>{
-        if(cj===si||r[0]<range[0]||r[1]>range[1])return;
-        if(!stDone(li,cj)){
-          state.progress.study[stKey(li,cj)]={n:0,last:Date.now(),next:Date.now()+REVIEW_DAYS[0]*DAY};
-        }
-      });
+  const p=state.progress,now=Date.now();
+  p.srs=p.srs||{};p.stageDone=p.stageDone||{};
+  stRange(li,si).forEach(g=>{
+    const k=srsKey(li,g),cur=p.srs[k];
+    if(ok){
+      /* 初めて → 1段目。復習日が来ていた駅だけ間隔を伸ばす（来ていない駅はそのまま） */
+      if(!cur)p.srs[k]={n:0,last:now,next:now+REVIEW_DAYS[0]*DAY};
+      else if(cur.next<=now){const n=Math.min(REVIEW_DAYS.length-1,cur.n+1);
+        p.srs[k]={n:n,last:now,next:now+REVIEW_DAYS[n]*DAY}}
+    }else if(cur){
+      /* 不合格：すでに覚えていた駅は間隔を最初に戻す（まだ覚えていない駅は記録しない） */
+      p.srs[k]={n:0,last:now,next:now+REVIEW_DAYS[0]*DAY};
     }
+  });
+  if(ok){
+    p.stageDone[stKey(li,si)]=now;
+    /* 全線通しに合格したら、6駅ずつの区間もすべて合格扱いにする */
+    if(isFullStage(li,si))stagesOf(LINES[li]).forEach((r,j)=>{if(!p.stageDone[stKey(li,j)])p.stageDone[stKey(li,j)]=now});
   }
   touch();
 }
 function dueList(){
-  const out=[],now=Date.now();
-  if(!state.progress.study)return out;
-  for(const k in state.progress.study){
-    const p=k.split(':'),li=+p[0],si=+p[1];
-    if(!LINES[li])continue;
-    if(LINES[li].level>state.level&&!state.admin)continue;
-    const r=stRec(li,si);
-    if(r&&r.next<=now)out.push({li:li,si:si,over:Math.floor((now-r.next)/DAY),n:r.n});
-  }
+  const out=[],now=Date.now(),s=state.progress.srs||{};
+  LINES.forEach(L=>{
+    if(L.level>state.level&&!state.admin)return;
+    stagesOf(L).forEach((r,si)=>{
+      if(!stDone(L.i,si)||isFullStage(L.i,si))return;
+      let over=-1,n=99;
+      stRange(L.i,si).forEach(g=>{const v=s[srsKey(L.i,g)];
+        if(v&&v.next<=now){over=Math.max(over,Math.floor((now-v.next)/DAY));n=Math.min(n,v.n)}});
+      if(over>=0)out.push({li:L.i,si:si,over:over,n:n});
+    });
+  });
   return out.sort((a,b)=>b.over-a.over);
+}
+/* 以前の区間の刻み方（6→12→24駅…と重なる）。古い記録を引き継ぐときだけ使う */
+function oldStagesOf(L){
+  const n=L.st.length,out=[];
+  if(n<=6)return[[0,n]];
+  let size=6;
+  while(true){
+    for(let s=0;s<n;s+=size){
+      let e=Math.min(n,s+size);
+      if(n-e>0&&n-e<6)e=n;
+      if(e-s>=2)out.push([s,e]);
+      if(e>=n)break;
+    }
+    if(size>=n)break;
+    size=Math.min(n,size*2);
+  }
+  const last=out[out.length-1];
+  if(!last||last[1]-last[0]<n)out.push([0,n]);
+  const seen={},uniq=[];
+  out.forEach(x=>{const k=x[0]+'-'+x[1];if(!seen[k]){seen[k]=1;uniq.push(x)}});
+  return uniq;
+}
+/* 古い記録（progress.study：区間ごとの復習予定）を、駅ごとの記録と新しい区間の合格に引き継ぐ。
+   古い記録は消さずに残す（stageDone がすでにあれば何もしない） */
+function migrateStudy(p){
+  if(p.stageDone)return;
+  p.stageDone={};p.srs={};
+  const old=p.study||{},now=Date.now();
+  const fullDone={};
+  for(const k in old){
+    const a=k.split(':'),li=+a[0],si=+a[1],L=LINES[li];
+    if(!L)continue;
+    const r=oldStagesOf(L)[si];if(!r)continue;
+    let v=old[k];
+    if(v===1||v===true||!v||typeof v!=='object')v={n:0,last:now,next:now+REVIEW_DAYS[0]*DAY};
+    if(r[0]===0&&r[1]===L.st.length)fullDone[li]=1;
+    for(let j=r[0];j<r[1];j++){
+      const sk=srsKey(li,L.st[j]),cur=p.srs[sk];
+      if(!cur||v.n>cur.n||(v.n===cur.n&&v.next<cur.next))p.srs[sk]={n:v.n,last:v.last||now,next:v.next};
+    }
+  }
+  LINES.forEach(L=>{
+    stagesOf(L).forEach((r,si)=>{
+      const full=isFullStage(L.i,si);
+      const ok=full?!!fullDone[L.i]:L.st.slice(r[0],r[1]).every(g=>p.srs[srsKey(L.i,g)]);
+      if(ok)p.stageDone[stKey(L.i,si)]=now;
+    });
+  });
 }
 const fmtDue=ms=>{const d=Math.ceil((ms-Date.now())/DAY);
   return d<=0?'今すぐ':(d===1?'明日':d+'日後')};
@@ -1146,31 +1206,31 @@ const GEN={map:genMap,quiz:genQuiz,route:genRoute,spot:genSpot};
 const SPOT_IX={};ST.forEach(s=>s.spots.forEach(p=>SPOT_IX[p[0]]={st:s.i,ic:p[1]}));
 
 /* ===== 学習モード ===== */
-/* 区間の刻み方：短い区間から始めて、覚えたら伸ばす */
+/* 区間の刻み方：重ならない6駅以下の区間を積み上げ、最後に全線を通しで1回。
+   7駅以下の路線は区間を分けず1回で覚える。2区間の路線（8〜12駅）は、2つ目の区間の
+   「つながり」問題で全線がつながるので、全線通しは付けない
+   （例：大江戸線38駅 → 6駅前後×7区間＋全線通し＝8ステージ） */
 const MIN_SEG=6;
+const STAGE_CACHE={};
 function stagesOf(L){
+  if(STAGE_CACHE[L.i])return STAGE_CACHE[L.i];
   const n=L.st.length,out=[];
-  if(n<=MIN_SEG)return[[0,n]];
-  let size=MIN_SEG;
-  while(true){
-    for(let s=0;s<n;s+=size){
-      let e=Math.min(n,s+size);
-      if(n-e>0&&n-e<MIN_SEG)e=n;          // 端に短すぎる余りを残さない
-      if(e-s>=2)out.push([s,e]);
-      if(e>=n)break;
-    }
-    if(size>=n)break;
-    size=Math.min(n,size*2);
+  if(n<=MIN_SEG+1)out.push([0,n]);
+  else{
+    const k=Math.ceil(n/MIN_SEG);
+    for(let j=0;j<k;j++)out.push([Math.round(j*n/k),Math.round((j+1)*n/k)]);
+    if(k>=3)out.push([0,n]);
   }
-  const last=out[out.length-1];
-  if(!last||last[1]-last[0]<n)out.push([0,n]);
-  const seen={},uniq=[];
-  out.forEach(x=>{const k=x[0]+'-'+x[1];if(!seen[k]){seen[k]=1;uniq.push(x)}});
-  return uniq;
+  return STAGE_CACHE[L.i]=out;
 }
 const stKey=(li,si)=>li+':'+si;
-const stDone=(li,si)=>!!(state.progress.study&&state.progress.study[stKey(li,si)]);
-const stDue=(li,si)=>{const r=stRec(li,si);return r&&r.next<=Date.now()};
+const stDone=(li,si)=>!!(state.progress.stageDone&&state.progress.stageDone[stKey(li,si)]);
+/* 復習どき：合格済みの（全線通し以外の）区間に、復習日が来た駅があるとき */
+const stDue=(li,si)=>{
+  if(!stDone(li,si)||isFullStage(li,si))return false;
+  const s=state.progress.srs||{},now=Date.now();
+  return stRange(li,si).some(g=>{const v=s[srsKey(li,g)];return v&&v.next<=now});
+};
 function lineProgress(L){
   const sg=stagesOf(L);
   let n=0,rev=0;
@@ -1193,7 +1253,7 @@ function screenLearn(){
   const w=el('div');
   const c=el('div','card');
   c.appendChild(el('div','eyebrow','Learn — インプット'));
-  c.appendChild(el('p','hint','路線を選ぶと、駅の並びと路線図を見ながら覚えられます。区間ごとに「見て覚える → その区間だけ確認」を繰り返し、慣れたら区間を広げていきます。'));
+  c.appendChild(el('p','hint','路線を選ぶと、駅の並びと路線図を見ながら覚えられます。6駅ずつ「見て覚える → 確認」を繰り返して前の区間とつなげ、最後に全線を通しで確認します。'));
   w.appendChild(c);
 
   const due=dueList();
@@ -1278,16 +1338,17 @@ function screenLine(d){
 
   const sc=el('div','card');
   sc.appendChild(el('div','eyebrow','Stages — 区間ごとに覚える'));
-  sc.appendChild(el('p','hint','上から順に。短い区間で覚えてから、だんだん範囲を広げます。'));
+  sc.appendChild(el('p','hint',p.stages.length===1?'この路線は短いので、全駅を1回で覚えます。'
+    :'上から順に。6駅ずつ覚えて前の区間とつなげ'
+      +(isFullStage(L.i,p.stages.length-1)?'、最後に全線を通しで確認します。':'ます。')));
   const gl=el('div','stages');
   p.stages.forEach((sg,i)=>{
-    const done=stDone(L.i,i),len=sg[1]-sg[0];
-    const prev=i===0||stDone(L.i,i-1);
-    const due=done&&stDue(L.i,i),rec=stRec(L.i,i);
+    const done=stDone(L.i,i),len=sg[1]-sg[0],full=isFullStage(L.i,i);
+    const due=stDue(L.i,i),rec=stRec(L.i,i);
     const b=el('button','stage'+(done?(due?' is-due':' is-done'):''));
     b.innerHTML='<span class="stage__i">'+(done?(due?'↻':'✓'):(i+1))+'</span>'
-      +'<span class="stage__t">'+ST[L.st[sg[0]]].ja+' 〜 '+ST[L.st[sg[1]-1]].ja+'</span>'
-      +'<span class="stage__n">'+(done?(due?'復習':fmtDue(rec.next)):len+'駅')+'</span>';
+      +'<span class="stage__t">'+(full?'全線通し　':'')+ST[L.st[sg[0]]].ja+' 〜 '+ST[L.st[sg[1]-1]].ja+'</span>'
+      +'<span class="stage__n">'+(done?(due?'復習':(rec?fmtDue(rec.next):'✓')):len+'駅')+'</span>';
     b.onclick=()=>render('memo',{li:L.i,si:i});
     gl.appendChild(b);
   });
@@ -1304,11 +1365,15 @@ function screenLine(d){
 /* --- 暗記フェーズ：区間の駅を見せる --- */
 function screenMemo(d){
   const L=LINES[d.li],sg=stagesOf(L)[d.si],ids=L.st.slice(sg[0],sg[1]);
+  const full=isFullStage(d.li,d.si),prevSt=(!full&&sg[0]>0)?L.st[sg[0]-1]:null;
   const w=el('div');
   const c=el('div','card');
   c.innerHTML='<div class="eyebrow">Step 1 — 見て覚える</div>'
-    +'<div style="font-size:15px;font-weight:600">'+L.ja+'　'+ST[ids[0]].ja+' 〜 '+ST[ids[ids.length-1]].ja+'</div>'
-    +'<p class="hint">この'+ids.length+'駅の順番を覚えてください。声に出す、指でなぞるなど、体を使うと定着します。</p>';
+    +'<div style="font-size:15px;font-weight:600">'+L.ja+'　'+(full?'全線通し　':'')+ST[ids[0]].ja+' 〜 '+ST[ids[ids.length-1]].ja+'</div>'
+    +'<p class="hint">'+(full?'これまでの区間をつなげて、全'+ids.length+'駅を通しで確認します。'
+      :'この'+ids.length+'駅の順番を覚えてください。'
+        +(prevSt?'前の区間の最後「'+ST[prevSt].ja+'」からのつながりも確認テストに出ます。':''))
+    +'声に出す、指でなぞるなど、体を使うと定着します。</p>';
   w.appendChild(c);
   const f=fitBox(withNeighbors(ids,L.i));
   const m=buildMap({labels:'auto',lv:state.level,view:f.box,ar:f.ar,
@@ -1317,6 +1382,12 @@ function screenMemo(d){
   w.appendChild(cap('この区間の'+ids.length+'駅（前後1駅も表示）'));
   const list=el('div','card');
   const seq=el('div','seq');
+  if(prevSt!=null){
+    const r=el('div','seq__row');r.style.opacity='.5';
+    r.innerHTML='<span class="seq__n">'+sg[0]+'</span><u style="background:'+L.c+'"></u>'
+      +'<span class="seq__nm">'+ST[prevSt].ja+'</span><span class="seq__w">前の区間の最後</span>';
+    seq.appendChild(r);
+  }
   ids.forEach((g,i)=>{
     const s=ST[g],r=el('div','seq__row');
     r.innerHTML='<span class="seq__n">'+(sg[0]+i+1)+'</span><u style="background:'+L.c+'"></u>'
@@ -1334,8 +1405,18 @@ function screenMemo(d){
 function buildCheck(li,si){
   const L=LINES[li],sg=stagesOf(L)[si],ids=L.st.slice(sg[0],sg[1]);
   const qs=[];
-  // 1. 並べ替え（順番に選ぶ）
-  qs.push({t:'order',ids:ids.slice(),li:li});
+  /* 前の区間の最後の駅（2つ目以降の区間）。つながりを確認するのに使う */
+  const prevSt=(!isFullStage(li,si)&&sg[0]>0)?L.st[sg[0]-1]:null;
+  // 1. 並べ替え（順番に選ぶ）。前の区間があれば、その最後の駅を置いた状態から始める
+  qs.push(prevSt!=null?{t:'order',ids:[prevSt].concat(ids),anchor:true,li:li}:{t:'order',ids:ids.slice(),li:li});
+  // 1b. つながり：前の区間の最後の駅の次は？（必ず出す）
+  let link=null;
+  if(prevSt!=null&&ids.length>=3){
+    const k=sg[0]-1,n=L.st.length;
+    const term=L.loop?L.st[(k+4)%n]:L.st[n-1];
+    link={t:'next',subject:prevSt,answer:ids[0],li:li,dirName:ST[term].ja,
+      options:shuffle([ids[0]].concat(shuffle(ids.slice(1)).slice(0,3)))};
+  }
   // 2. 隣の駅（各駅について）
   const inner=ids.length>2?ids.slice(0,ids.length-1):ids;
   shuffle(inner).slice(0,Math.min(4,inner.length)).forEach(g=>{
@@ -1368,7 +1449,10 @@ function buildCheck(li,si){
         options:shuffle([blank].concat(dis2))});
     }
   }
-  return shuffle(qs.filter(Boolean)).slice(0,6);
+  /* 並べ替え（qs[0]）とつながりは必ず残し、残りから6問になるまで選ぶ */
+  const must=[qs[0]].concat(link?[link]:[]);
+  const rest=shuffle(qs.slice(1).filter(Boolean)).slice(0,6-must.length);
+  return shuffle(must.concat(rest));
 }
 function startCheck(li,si,inReview){
   state.t0=Date.now();
@@ -1415,17 +1499,19 @@ function buildCheckUI(q,area){
     return;
   }
   if(q.t==='order'){
-    area.appendChild(el('p','q-text','この区間の駅を、'+ST[q.ids[0]].ja+' から順にタップしてください。'));
+    area.appendChild(el('p','q-text',q.anchor
+      ?'前の区間の最後「'+ST[q.ids[0]].ja+'」に続けて、この区間の駅を順にタップしてください。'
+      :'この区間の駅を、'+ST[q.ids[0]].ja+' から順にタップしてください。'));
     const tray=el('div','tray'),slot=el('div','slots');
     area.appendChild(slot);area.appendChild(tray);
-    let picked=[],hadMistake=false;
+    let picked=q.anchor?[q.ids[0]]:[],hadMistake=false;
     const redraw=()=>{
       slot.innerHTML='';picked.forEach((g,i)=>{
         const t=el('span','tag is-ok',(i+1)+'. '+ST[g].ja);slot.appendChild(t)});
       if(!picked.length)slot.appendChild(el('span','hint','ここに順番が入ります'));
     };
     redraw();
-    shuffle(q.ids.slice()).forEach(g=>{
+    shuffle(q.anchor?q.ids.slice(1):q.ids.slice()).forEach(g=>{
       const b=el('button','tag',ST[g].ja);
       b.onclick=()=>{
         if(b.disabled)return;
@@ -1539,7 +1625,8 @@ function screenCheckDone(d){
     :'50%以上でクリアです。もう一度、駅の並びを見てから挑戦してみてください。';
   c.appendChild(m);w.appendChild(c);
   if(d.passed&&d.si+1<sg.length){
-    const b=el('button','btn','次のステージへ（'+ST[L.st[sg[d.si+1][0]]].ja+'〜）');
+    const b=el('button','btn',isFullStage(d.li,d.si+1)?'最後のステージへ（全線通し）'
+      :'次のステージへ（'+ST[L.st[sg[d.si+1][0]]].ja+'〜）');
     b.onclick=()=>render('memo',{li:d.li,si:d.si+1});w.appendChild(b);
   }else if(d.passed){
     const b=el('button','btn',L.ja+' 制覇！　路線一覧へ');b.onclick=()=>render('learn');w.appendChild(b);
@@ -2049,13 +2136,12 @@ function screenAdmin(){
   const r1=el('button','btn btn--gh btn--sm','全レベルを解放');
   r1.onclick=()=>{state.progress.unlocked=4;touch();render()};
   const r2=el('button','btn btn--gh btn--sm','復習を今すぐ全部出す');
-  r2.onclick=()=>{const s2=state.progress.study||{};
-    for(const k in s2){const v=stRec(+k.split(':')[0],+k.split(':')[1]);
-      if(v)s2[k]={n:v.n,last:v.last,next:Date.now()-1}}
+  r2.onclick=()=>{const s2=state.progress.srs||{};
+    for(const k in s2)s2[k].next=Date.now()-1;
     touch();render('learn')};
   const r3=el('button','btn btn--gh btn--sm','学習記録をリセット');
   r3.onclick=()=>{if(!confirm('この アカウントの学習記録をすべて消します。よろしいですか？'))return;
-    state.progress.study={};touch();render()};
+    state.progress.study={};state.progress.stageDone={};state.progress.srs={};touch();render()};
   [r1,r2,r3].forEach(b=>{b.style.flex='1 1 45%';rw.appendChild(b)});
   c4.appendChild(rw);
   c4.appendChild(el('p','hint','変更は「保存」を押すまで確定しません。'));
@@ -2125,7 +2211,7 @@ function screenLogin(msg){
       const r=el('div','acrow');
       const p=a[k].progress||{};
       r.innerHTML='<b>'+k+'</b><span>Lv.'+(a[k].level||1)+'　'
-        +Object.keys(p.study||{}).length+'区間クリア</span>';
+        +Object.keys(p.stageDone||p.study||{}).length+'区間クリア</span>';
       const del=el('button',null,'削除');
       del.onclick=async()=>{if(!confirm(k+' の記録を削除します。よろしいですか？'))return;
         const acc=await getAccounts();delete acc[k];await putAccounts(acc);render('login')};
