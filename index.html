@@ -823,7 +823,9 @@ const tx=(x,y,c,t,an,ex)=>{const n=sv('text',Object.assign({x:x,y:y,class:'lbl '
 
 function buildMap(o){
   o=Object.assign({labels:'auto',interactive:false,onTap:null,ar:AR_T,view:null,marks:[],
-    legend:false,maxVh:0,lv:state.level,routeLegs:null,focusLine:null,locked:false,hlWard:null},o||{});
+    legend:false,maxVh:0,lv:state.level,routeLegs:null,focusLine:null,locked:false,hlWard:null,
+    hideNames:false},o||{});
+  /* hideNames：駅名を伏せておき、駅を押すとその駅名を出す（もう一度押すと伏せる）。学習の確認テストのヒント地図用 */
   const view=o.view||levelBox(o.lv,o.ar);
   let locked=!!o.locked;
   const wrap=el('div','map-wrap');
@@ -921,7 +923,7 @@ function buildMap(o){
     if(o.focusLine!==null&&o.focusLine!==undefined)on=(s.lines.indexOf(o.focusLine)>=0);
     const mk=mkOf(i);
     const g=sv('g',{class:'st-g','data-idx':i});
-    if(o.interactive&&on)g.setAttribute('data-tap','1');
+    if((o.interactive&&on)||o.hideNames)g.setAttribute('data-tap','1');
     g.appendChild(sv('circle',{cx:P[i].x,cy:P[i].y,r:16,class:'st-hit'}));
     g.appendChild(sv('circle',{cx:P[i].x,cy:P[i].y,r:rad(s.pax),class:'st-dot',
       opacity:mk?1:(hasRel&&relSet[i]===undefined?.17:(on?1:.35))}));
@@ -929,13 +931,29 @@ function buildMap(o){
       const lf=P[i].x<(vb[0]+vb[2]/2),off=rad(s.pax)+4;
       /* 問題で扱う駅＝強調、関係する路線の駅＝通常、それ以外＝参照できる程度に薄く */
       const cls=mk?'lbl--mk':(hasRel&&relSet[i]===undefined?'lbl--far':'lbl--st');
-      const labelText=(mk&&mk.kind==='blank')?'？':s.ja;
-      g.appendChild(tx(P[i].x+(lf?-off:off),P[i].y+3.5+showL[i],cls+(mk&&mk.kind==='blank'?' lbl--blank':''),labelText,lf?'end':'start'));
+      const labelText=(mk&&mk.kind==='blank'&&!o.hideNames)?'？':s.ja;
+      const t=tx(P[i].x+(lf?-off:off),P[i].y+3.5+showL[i],cls+(mk&&mk.kind==='blank'&&!o.hideNames?' lbl--blank':''),labelText,lf?'end':'start');
+      if(o.hideNames)t.setAttribute('visibility','hidden');
+      g.appendChild(t);
     }
     if(mk)g.setAttribute('class','st-g '+(mk.kind==='right'?'is-r':(mk.kind==='blank'?'is-blank':'is-w')));
     svg.appendChild(g);groups[i]=g;
   });
   wrap.appendChild(svg);
+  if(o.hideNames){
+    o.interactive=true;
+    o.onTap=(i,g)=>{
+      let t=g.querySelector('text');
+      if(!t){   // 混み合って名前の場所がなかった駅は、駅のすぐ横に出す
+        const lf=P[i].x<(vb[0]+vb[2]/2),off=rad(ST[i].pax)+4;
+        t=tx(P[i].x+(lf?-off:off),P[i].y+3.5,mkOf(i)?'lbl--mk':'lbl--st',ST[i].ja,lf?'end':'start');
+        t.setAttribute('visibility','hidden');g.appendChild(t);
+      }
+      const show=t.getAttribute('visibility')==='hidden';
+      t.setAttribute('visibility',show?'visible':'hidden');
+      if(show)svg.appendChild(g);   // 出した名前がほかの駅に隠れないよう前面へ
+    };
+  }
 
   const pts=new Map();let last=null,pinch=null,moved=0,downG=null;
   const apply=()=>svg.setAttribute('viewBox',vb.map(v=>v.toFixed(1)).join(' '));
@@ -1056,12 +1074,12 @@ function fitBox(idxs,extra){
   else if(ar>AR_MAX){ar=AR_MAX;w=h/ar}
   return{box:[(x0+x1)/2-w/2,(y0+y1)/2-h/2,w,h],ar:ar};
 }
-function miniMap(idxs,marks,legs,li,ward){
+function miniMap(idxs,marks,legs,li,ward,extra){
   const ids=withNeighbors(idxs,li);
   const f=fitBox(ids,wardPts(ward));
-  return buildMap({view:f.box,ar:f.ar,labels:'auto',marks:marks,routeLegs:legs,
+  return buildMap(Object.assign({view:f.box,ar:f.ar,labels:'auto',marks:marks,routeLegs:legs,
     lv:Math.max(state.level,Math.max.apply(null,ids.map(i=>ST[i].level))),locked:true,
-    hlWard:wardKey(ward)}).wrap;
+    hlWard:wardKey(ward)},extra||{})).wrap;
 }
 const cap=t=>el('p','map-cap',t);
 
@@ -1467,7 +1485,26 @@ function screenCheck(){
   const ab=el('button',null,'やめる');ab.onclick=()=>render('line',{li:C.li});pr.appendChild(ab);
   w.appendChild(pr);
   const c=el('div','card');
-  c.appendChild(el('div','eyebrow','Step 2 — 確認　'+L.ja));
+  /* 左上の地図ボタン：解説と同じ地図を、駅名を伏せて出す（駅を押すと名前が出る） */
+  const head=el('div');head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:10px';
+  const mapBtn=el('button',null,'🗺');
+  mapBtn.setAttribute('aria-label','地図を表示');mapBtn.title='地図を表示（駅名は伏せてあります）';
+  mapBtn.style.cssText='flex:0 0 auto;width:38px;height:38px;border:1px solid var(--rule);border-radius:5px;'
+    +'background:#fff;font-size:19px;line-height:1;cursor:pointer;padding:0';
+  const eb=el('div','eyebrow','Step 2 — 確認　'+L.ja);eb.style.marginBottom='0';
+  head.appendChild(mapBtn);head.appendChild(eb);c.appendChild(head);
+  const hint=el('div');hint.style.cssText='display:none;margin-bottom:12px';c.appendChild(hint);
+  mapBtn.onclick=()=>{
+    const open=hint.style.display==='none';
+    if(open&&!hint.firstChild){
+      const ids=checkFocus(q,C);
+      hint.appendChild(miniMap(ids,ids.map(i=>({idx:i,kind:'right'})),null,C.li,null,{hideNames:true}));
+      hint.appendChild(cap('駅名は伏せてあります。駅を押すと名前が出ます'));
+    }
+    hint.style.display=open?'block':'none';
+    mapBtn.style.background=open?'var(--yamanote)':'#fff';
+    mapBtn.setAttribute('aria-pressed',String(open));
+  };
   const area=el('div');area.id='chk';c.appendChild(area);
   w.appendChild(c);
   setTimeout(()=>buildCheckUI(q,area),0);
@@ -1575,6 +1612,13 @@ function buildCheckUI(q,area){
       q.t==='next'?[q.subject,q.answer]:[q.answer]);
   };
   area.appendChild(u);
+}
+/* 解説の地図で強調する駅（buildCheckUI が finCheck に渡すものと同じ）。ヒント地図もこれを使う */
+function checkFocus(q,C){
+  if(q.t==='mapfill'||q.t==='order')return q.ids.slice();
+  if(q.t==='next')return[q.subject,q.answer];
+  if(q.t==='member')return[q.answer];
+  return stRange(C.li,C.si);
 }
 function finCheck(ok,msg,focus){
   const C=state.check;if(C.ans)return;C.ans=true;if(ok)C.ok++;
