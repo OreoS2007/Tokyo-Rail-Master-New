@@ -1489,27 +1489,8 @@ function screenCheck(){
   const ab=el('button',null,'やめる');ab.onclick=()=>render('line',{li:C.li});pr.appendChild(ab);
   w.appendChild(pr);
   const c=el('div','card');
-  /* 左上の地図ボタン：解説と同じ範囲の地図を、駅名を伏せ、強調なしで出す（駅を押すと名前が出る） */
-  const head=el('div');head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:10px';
-  const mapBtn=el('button',null,'🗺');
-  mapBtn.setAttribute('aria-label','地図を表示');mapBtn.title='地図を表示（駅名は伏せてあります）';
-  mapBtn.style.cssText='flex:0 0 auto;width:38px;height:38px;border:1px solid var(--rule);border-radius:5px;'
-    +'background:#fff;font-size:19px;line-height:1;cursor:pointer;padding:0';
-  const eb=el('div','eyebrow','Step 2 — 確認　'+L.ja);eb.style.marginBottom='0';
-  head.appendChild(mapBtn);head.appendChild(eb);c.appendChild(head);
-  const hint=el('div');hint.style.cssText='display:none;margin-bottom:12px';c.appendChild(hint);
-  mapBtn.onclick=()=>{
-    const open=hint.style.display==='none';
-    if(open&&!hint.firstChild){
-      /* 表示範囲は解説と同じ（checkFocus の駅と前後1駅）。答えが分からないよう駅の強調はせず、
-         この路線の駅をすべて同じ見た目で出す */
-      hint.appendChild(miniMap(checkFocus(q,C),[],null,C.li,null,{hideNames:true,focusLine:C.li}));
-      hint.appendChild(cap('駅名は伏せてあります。駅を押すと名前が出ます'));
-    }
-    hint.style.display=open?'block':'none';
-    mapBtn.style.background=open?'var(--yamanote)':'#fff';
-    mapBtn.setAttribute('aria-pressed',String(open));
-  };
+  c.appendChild(el('div','eyebrow','Step 2 — 確認　'+L.ja));
+  mountCheckMapBtn(q,C);   // ホームボタンの下に地図ボタンを出す
   const area=el('div');area.id='chk';c.appendChild(area);
   w.appendChild(c);
   setTimeout(()=>buildCheckUI(q,area),0);
@@ -1617,6 +1598,91 @@ function buildCheckUI(q,area){
       q.t==='next'?[q.subject,q.answer]:[q.answer]);
   };
   area.appendChild(u);
+}
+/* ===== 確認テストのヒント地図 =====
+   地図ボタンは画面上部（スクロールしても残る #topBar）の、ホームボタンのすぐ下に置く。
+   押すと、解説と同じ表示範囲の地図を、駅の強調なし・駅名を伏せて重ねて開く（駅を押すと名前が出る）。
+   開くときは地図ボタンから広がり、閉じるときは地図ボタンに向かって縮む。
+   確認テスト以外の画面に移るときは render() が removeCheckMap() で片付ける */
+let checkMapPlace=null;
+window.addEventListener('resize',()=>{if(checkMapPlace)checkMapPlace()});
+function removeCheckMap(){
+  const b=$('#checkMapBtn');if(b)b.remove();
+  const ov=$('#checkMapOv');if(ov)ov.remove();
+  const ub=$('#userBar');if(ub)ub.style.paddingLeft='';
+  checkMapPlace=null;
+}
+function mountCheckMapBtn(q,C){
+  removeCheckMap();
+  const top=$('#topBar'),nav=$('#navBar'),home=nav&&nav.querySelector('.nav__b');
+  if(!top||!home)return;
+  const b=el('button','nav__b','<i>🗺</i>地図');
+  b.id='checkMapBtn';b.setAttribute('aria-label','地図を開く（駅名は伏せてあります）');
+  b.style.cssText='position:absolute;z-index:41;flex:none;box-shadow:0 2px 7px rgba(10,18,24,.18)';
+  /* ホームボタンと同じ幅で、そのすぐ下。下の名前の欄は、ボタンに重ならないよう左を空ける */
+  checkMapPlace=()=>{
+    b.style.left=home.offsetLeft+'px';b.style.width=home.offsetWidth+'px';
+    b.style.top=(nav.offsetTop+nav.offsetHeight+6)+'px';
+    const ub=$('#userBar');if(ub)ub.style.paddingLeft=(home.offsetWidth+20)+'px';
+  };
+  b.onclick=()=>openCheckMap(q,C,b);
+  top.appendChild(b);checkMapPlace();
+}
+function openCheckMap(q,C,btn){
+  if($('#checkMapOv'))return;
+  /* 地図は問題ごとに1回だけ作り、開き直しても出した駅名はそのまま残す */
+  if(!q._hintMap){
+    const wrap=miniMap(checkFocus(q,C),[],null,C.li,null,{hideNames:true,focusLine:C.li});
+    const vb=wrap.querySelector('svg').getAttribute('viewBox').split(' ').map(Number);
+    /* 横長・背の低い画面でも「閉じる」まで一度に収まるよう、地図の幅を画面の高さで抑える */
+    wrap.style.maxWidth='max(240px, calc((100vh - 190px) / '+(vb[3]/vb[2]).toFixed(3)+'))';
+    wrap.style.margin='0 auto';
+    q._hintMap=wrap;
+  }
+  const ov=el('div');ov.id='checkMapOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:100;background:rgba(10,18,24,.55);'
+    +'display:flex;align-items:center;justify-content:center;padding:12px';
+  const box=el('div','card');
+  box.style.cssText='max-width:560px;width:100%;max-height:100%;overflow:auto;margin:0;animation:none';
+  box.appendChild(el('div','eyebrow','地図（駅名は伏せてあります）'));
+  box.appendChild(q._hintMap);
+  box.appendChild(cap('駅を押すと名前が出ます。もう一度押すと伏せます'));
+  const still=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const T_OPEN=still?0:300,T_CLOSE=still?0:240;
+  /* 地図ボタンの位置・大きさに重なる形（毎回そのときの位置から計算する） */
+  const atButton=()=>{
+    const r=box.getBoundingClientRect(),a=btn.getBoundingClientRect();
+    if(!r.width||!a.width)return 'scale(.9)';
+    const dx=(a.left+a.width/2)-(r.left+r.width/2),dy=(a.top+a.height/2)-(r.top+r.height/2);
+    const s=Math.max(a.width/r.width,a.height/r.height);
+    return 'translate('+dx.toFixed(1)+'px,'+dy.toFixed(1)+'px) scale('+s.toFixed(3)+')';
+  };
+  const play=open=>{
+    if(!box.animate)return;
+    const small=atButton();
+    if(open){
+      ov.animate([{opacity:0},{opacity:1}],{duration:T_OPEN,easing:'ease-out',fill:'both'});
+      box.animate([{transform:small,opacity:0},{opacity:1,offset:.3},{transform:'none',opacity:1}],
+        {duration:T_OPEN,easing:'cubic-bezier(.2,.8,.3,1)',fill:'both'});
+    }else{
+      ov.animate([{opacity:1},{opacity:0}],{duration:T_CLOSE,easing:'ease-in',fill:'both'});
+      box.animate([{transform:'none',opacity:1},{opacity:1,offset:.7},{transform:small,opacity:0}],
+        {duration:T_CLOSE,easing:'cubic-bezier(.5,0,.75,.3)',fill:'both'});
+    }
+  };
+  let closing=false;
+  const shut=()=>{
+    if(closing)return;closing=true;
+    btn.classList.remove('is-cur');
+    play(false);setTimeout(()=>ov.remove(),T_CLOSE);
+  };
+  const close=el('button','btn','閉じる');close.style.marginTop='10px';
+  close.onclick=shut;
+  ov.onclick=e=>{if(e.target===ov)shut()};
+  box.appendChild(close);ov.appendChild(box);
+  document.body.appendChild(ov);
+  btn.classList.add('is-cur');
+  play(true);
 }
 /* 解説の地図で強調する駅（buildCheckUI が finCheck に渡すものと同じ）。ヒント地図もこれを使う */
 function checkFocus(q,C){
@@ -2610,6 +2676,7 @@ async function leaveOk(){
 function render(v,d,keep){
   const sy=keep?window.scrollY:0;
   if(v){view=v;vd=d}
+  removeCheckMap();   // 路線マスターの確認テストの地図ボタン（確認テストの画面なら screenCheck が出し直す）
   const wrap=$('#screen');wrap.innerHTML='';
   const topBar=$('#topBar');
   topBar.style.display=OUTER_VIEWS[view]?'none':'';
